@@ -39,7 +39,7 @@ router.post("/login", async function (req, res) {
 // Register
 router.post("/register", async function (req, res) {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, username } = req.body;
 
     // Check if user already exists
     const existingUser = await userModel.findOne({ email: email });
@@ -54,7 +54,7 @@ router.post("/register", async function (req, res) {
     const newUser = new userModel({
       email: email,
       password: password,
-      name: name
+      username: username
     });
 
     // Save user to database
