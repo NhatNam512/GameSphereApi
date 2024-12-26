@@ -3,6 +3,7 @@ var router = express.Router();
 const userModel = require("../models/userModel");
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
+const bcrypt = require('bcrypt')
 
 // Login
 router.get("/all", async function (req, res) {
@@ -17,9 +18,16 @@ router.get("/all", async function (req, res) {
 router.post("/login", async function (req, res) {
   try {
     const { email, password } = req.body;
-    const checkUser = await userModel.findOne({ email: email, password: password });
-    if (checkUser == null) {
-      res.status(400).json({ status: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
+    // Tìm người dùng theo email
+    const checkUser = await userModel.findOne({ email: email });
+    if (!checkUser) {
+      return res.status(400).json({ status: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
+    }
+
+    // So sánh mật khẩu đã mã hóa
+    const isPasswordValid = await bcrypt.compare(password, checkUser.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ status: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
     else {
       var token = JWT.sign({ email: email }, config.SECRETKEY, { expiresIn: "1h" });
@@ -40,7 +48,6 @@ router.post("/login", async function (req, res) {
 router.post("/register", async function (req, res) {
   try {
     const { email, password, username } = req.body;
-
     // Check if user already exists
     const existingUser = await userModel.findOne({ email: email });
     if (existingUser) {
@@ -51,9 +58,11 @@ router.post("/register", async function (req, res) {
     }
 
     // Create new user
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const newUser = new userModel({
       email: email,
-      password: password,
+      password: hashedPassword,
       username: username
     });
 
