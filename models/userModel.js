@@ -6,6 +6,8 @@ const user = new schema({
     email:{type:String},
     password:{type:String},
     username:{type:String},
-    follower:{typep:Number}
+    follower:{typep:Number},
+    createAt:{type: Date, default: Date.now()},
+    updateAt:{type: Date, default: Date.now()}
 });
 module.exports = mongoose.model.user || mongoose.model("user", user);
