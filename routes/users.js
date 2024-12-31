@@ -35,8 +35,11 @@ router.post("/login", async function (req, res) {
       res.status(200).json({
         status: true,
         message: "Đăng nhập thành công",
-        token: token,
-        refreshToken: refreshToken,
+        data:{
+          id: checkUser.id,
+          email: checkUser.email,
+          token: token,
+        }
       });
     }
   } catch (e) {
