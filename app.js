@@ -3,7 +3,6 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
-const cors = require('cors');
 
 const mongoose = require('mongoose');
 require("./models/userModel");
@@ -55,21 +54,6 @@ app.use(function(err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
   res.render('error');
-});
-
-// Sử dụng middleware CORS
-app.use(cors({
-  origin: 'http://localhost:3000' // Cho phép yêu cầu từ miền này
-}));
-
-// Các route khác của bạn
-app.get('/categories/all', (req, res) => {
-  // Trả về dữ liệu
-});
-
-// Khởi động máy chủ
-app.listen(30000, () => {
-  console.log('Server is running on port 30000');
 });
 
 module.exports = app;
