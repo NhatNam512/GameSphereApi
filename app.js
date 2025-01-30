@@ -8,12 +8,14 @@ const mongoose = require('mongoose');
 require("./models/userModel");
 require("./models/gameModel");
 require("./models/categoryModel");
+require("./models/eventModel");
 
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var gamesRouter = require('./routes/games');
 var categoriesRouter = require('./routes/categories');
+var eventsRouter = require('./routes/events');
 
 var app = express();
 
@@ -36,6 +38,7 @@ app.use('/', indexRouter);
 app.use('/users', usersRouter);
 app.use('/games', gamesRouter);
 app.use('/categories', categoriesRouter);
+app.use('/events', eventsRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));

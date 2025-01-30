@@ -1,8 +1,11 @@
 const mongoose = require("mongoose");
 const schema = mongoose.Schema;
 const oid = schema.ObjectId;
-const category = new schema({
-    id:{type:oid},
-    title:{type:String}
+
+const categories = new schema({
+    id: { type: oid },
+    name: { type: String, required: true },
+    image: { type: String }
 });
-module.exports = mongoose.model.category || mongoose.model("category", category);
+
+module.exports = mongoose.models.categories || mongoose.model("categories", categories);

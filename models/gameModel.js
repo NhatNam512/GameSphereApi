@@ -8,10 +8,12 @@ const gameSchema = new schema({
     description: { type: String },
     developer: { type: String },
     size: { type: String },
-    rating: { type: Number, min: 0, max: 5 },
-    downloadLinks: { type: [String] }, // Changed to an array for multiple links
+    rating: { type: Number, min: 0, max: 10 },
+    downloadLinks: { type: String }, // Changed to an array for multiple links
     images: { type: [String] }, // Better to enforce an array of strings (URLs)
-    categories: { type: oid, ref: "category" } // Defining categories as an array of strings
+    categories: { type: [oid], ref: "categories" }, // Defining categories as an array of strings
+    newReleases: { type: Boolean },
+    upComing: { type: Boolean },
 });
 
 module.exports = mongoose.models.game || mongoose.model("game", gameSchema);
