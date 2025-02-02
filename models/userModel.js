@@ -9,6 +9,7 @@ const user = new schema({
     follower:{typep:Number},
     picUrr:{type:String},
     createAt:{type: Date, default: Date.now()},
-    updateAt:{type: Date, default: Date.now()}
+    updateAt:{type: Date, default: Date.now()},
+    role: {type: Number}
 });
 module.exports = mongoose.model.user || mongoose.model("user", user);

@@ -66,7 +66,8 @@ router.post("/register", async function (req, res) {
     const newUser = new userModel({
       email: email,
       password: hashedPassword,
-      username: username
+      username: username,
+      role: 3,
     });
 
     // Save user to database

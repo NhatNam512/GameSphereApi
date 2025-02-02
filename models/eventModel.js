@@ -11,7 +11,7 @@ const events = new schema({
     avatar: { type: String },
     images: { type: [String] }, // Better to enforce an array of strings (URLs)
     banner: { type: String },
-    categories: { type: [oid], ref: "categories" }, // Defining categories as an array of strings
+    categories: { type: oid, ref: "categories" }, // Defining categories as an array of strings
     location: { type: String },
     ticketPrice: { type: Number },
     ticketQuantity: { type: Number },
