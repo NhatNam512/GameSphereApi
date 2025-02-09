@@ -10,6 +10,8 @@ const user = new schema({
     picUrr:{type:String},
     createAt:{type: Date, default: Date.now()},
     updateAt:{type: Date, default: Date.now()},
-    role: {type: Number}
+    role: {type: Number},
+    longitude: { type: Number },
+    latitude: { type: Number },
 });
 module.exports = mongoose.model.user || mongoose.model("user", user);

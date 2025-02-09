@@ -35,8 +35,8 @@ router.get("/detail:id", async function (req, res) {
 
 router.post("/add", async function (req, res) {
   try {
-    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating } = req.body;
-    const newItem = { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating };
+    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude } = req.body;
+    const newItem = { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude };
     await eventModel.create(newItem);
     res.status(200).json({
       status: true,
@@ -50,7 +50,7 @@ router.post("/add", async function (req, res) {
 
 router.put("/edit", async function (req, res) {
   try {
-    const { id, name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating } = req.body;
+    const { id, name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude } = req.body;
     const itemUpdate = await eventModel.findById(id);
 
     if (itemUpdate) {
@@ -67,6 +67,8 @@ router.put("/edit", async function (req, res) {
       itemUpdate.ticketQuantity = ticketQuantity ? ticketQuantity : itemUpdate.ticketQuantity;
       itemUpdate.location = location ? location : itemUpdate.location;
       itemUpdate.rating = rating ? rating : itemUpdate.rating;
+      itemUpdate.longitude = longitude ? longitude : itemUpdate.longitude;
+      itemUpdate.latitude = latitude ? latitude : itemUpdate.latitude;
 
       await itemUpdate.save();
       res.status(200).json({ status: true, message: "Successfully" });

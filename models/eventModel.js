@@ -9,14 +9,15 @@ const events = new schema({
     timeStart: { type: Number },
     timeEnd:{ type: Number },
     avatar: { type: String },
-    images: { type: [String] }, // Better to enforce an array of strings (URLs)
+    images: { type: [String] }, 
     banner: { type: String },
-    categories: { type: oid, ref: "categories" }, // Defining categories as an array of strings
-    location: { type: String },
+    categories: { type: oid, ref: "categories" },
     ticketPrice: { type: Number },
     ticketQuantity: { type: Number },
     status: { type: String },
-    rating: { type: Number }
+    rating: { type: Number },
+    longitude: { type: Number },
+    latitude: { type: Number },
 });
 
 module.exports = mongoose.models.events || mongoose.model("events", events);

@@ -85,5 +85,25 @@ router.post("/register", async function (req, res) {
   }
 });
 
+router.put("/addLocaation", async function (req, res) {
+  try{
+    const {id, longitude, latitude} = req.body;
+    const itemUpdate = await userModel.findById(id);
+
+    if(itemUpdate){
+      itemUpdate.longitude = longitude ? longitude : itemUpdate.longitude;
+      itemUpdate.latitude = latitude ? latitude : itemUpdate.latitude;
+
+      await itemUpdate.save();
+      res.status(200).json({ status: true, message: "Successfully" });
+    }
+    else{
+      res.status(300).json({ status: true, message: "Not found" });
+    }
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error" + e });
+  }
+})
+
 module.exports = router;
 
