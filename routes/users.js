@@ -85,7 +85,7 @@ router.post("/register", async function (req, res) {
   }
 });
 
-router.put("/addLocaation", async function (req, res) {
+router.put("/addLocation", async function (req, res) {
   try{
     const {id, longitude, latitude} = req.body;
     const itemUpdate = await userModel.findById(id);
