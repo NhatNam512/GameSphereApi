@@ -58,7 +58,7 @@ router.post("/createTicket", async (req, res) => {
     } catch (error) {
         await session.abortTransaction();
         console.error(error);
-        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo vé." });
+        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo vé.", error });
     } finally {
         session.endSession();
     }
