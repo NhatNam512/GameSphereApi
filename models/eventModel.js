@@ -14,6 +14,7 @@ const events = new schema({
     categories: { type: oid, ref: "categories" },
     ticketPrice: { type: Number },
     ticketQuantity: { type: Number },
+    soldTickets: { type: Number, default: 0 }, // Số vé đã bán 
     status: { type: String },
     rating: { type: Number },
     longitude: { type: Number },

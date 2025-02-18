@@ -7,11 +7,12 @@ const user = new schema({
     password:{type:String},
     username:{type:String},
     follower:{typep:Number},
-    picUrr:{type:String},
+    picUrl:{type:String},
     createAt:{type: Date, default: Date.now()},
     updateAt:{type: Date, default: Date.now()},
     role: {type: Number},
     longitude: { type: Number },
     latitude: { type: Number },
+    ticketsHave: {type: [oid], ref: "tickets"}
 });
 module.exports = mongoose.model.user || mongoose.model("user", user);

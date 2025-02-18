@@ -56,7 +56,6 @@ router.put("/edit", async function (req, res) {
     if (itemUpdate) {
       itemUpdate.name = name ? name : itemUpdate.name;
       itemUpdate.description = description ? description : itemUpdate.description;
-      itemUpdate.description = description ? description : itemUpdate.description;
       itemUpdate.timeStart = timeStart ? timeStart : itemUpdate.timeStart;
       itemUpdate.timeEnd = timeEnd ? timeEnd : itemUpdate.timeEnd;
       itemUpdate.avatar = avatar ? avatar : itemUpdate.avatar;
