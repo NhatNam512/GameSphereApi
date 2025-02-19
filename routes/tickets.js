@@ -11,10 +11,18 @@ router.get("/getTicket/:userId", async function (req, res) {
     res.json({ success: true, tickets });
 })
 
-// const generateTicketNumber = async () => {
-//     const lastTicket = await Ticket.findOne().sort({ ticketNumber: -1 });
-//     return lastTicket ? lastTicket.ticketNumber + 1 : 100000; // Bắt đầu từ 100000
-// };
+const generateTicketNumber = async () => {
+    let ticketNumber;
+    let isUnique = false;
+
+    while (!isUnique) {
+        ticketNumber = await Ticket.findOne().sort({ ticketNumber: -1 }).then(ticket => ticket ? ticket.ticketNumber + 1 : 100000);
+        const existingTicket = await Ticket.findOne({ ticketNumber });
+        isUnique = !existingTicket; // Kiểm tra xem số vé đã tồn tại hay chưa
+    }
+
+    return ticketNumber;
+};
 
 router.post("/createTicket", async (req, res) => {
     const session = await mongoose.startSession();
@@ -58,7 +66,7 @@ router.post("/createTicket", async (req, res) => {
     } catch (error) {
         await session.abortTransaction();
         console.error(error);
-        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo vé.", error });
+        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo vé." + error });
     } finally {
         session.endSession();
     }

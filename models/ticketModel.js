@@ -7,7 +7,7 @@ const ticket = new schema({
     eventId: {type: oid, ref: "events"},
     orderId: {type: oid, ref: "order"},
     qrCode: {type: String},
-    ticketNumber: { type: Number, unique: true },
+    ticketNumber: { type: Number },
     ticketType: {type: String},
     price: {type: Number},
     createdAt: { type: Date, default: Date.now }, 
