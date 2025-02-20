@@ -20,7 +20,7 @@ router.get("/all", async function (req, res) {
 router.get("/detail:id", async function (req, res) {
   try {
     const { id } = req.params;
-    var detail = await productModel.findById(id);
+    var detail = await eventModel.findById(id);
 
     if (detail) {
       res.status(200).json(detail);
