@@ -36,7 +36,7 @@ router.post("/login", async function (req, res) {
         status: true,
         message: "Đăng nhập thành công",
         data:{
-          id: checkUser._id,
+          id: checkUser.id,
           email: checkUser.email,
           token: token,
         }
