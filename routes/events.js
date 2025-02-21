@@ -17,7 +17,7 @@ router.get("/all", async function (req, res) {
   }
 });
 
-router.get("/detail:id", async function (req, res) {
+router.get("/detail/:id", async function (req, res) {
   try {
     const { id } = req.params;
     var detail = await eventModel.findById(id);
@@ -26,12 +26,27 @@ router.get("/detail:id", async function (req, res) {
       res.status(200).json(detail);
     }
     else {
-      res.status(400).json({ status: true, message: "Error" })
+      res.status(404).json({ status: true, message: "Not Found" })
     }
   } catch (e) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
 });
+
+router.get("/categories/:id", async function (req,  res) {
+  try{
+    const {id} = req.params;
+    var categories = await eventModel.find({categories: id});
+    if(categories.length>0){
+      res.status(200).json(categories)
+    }
+    else {
+      res.status(404).json({ status: false, message: "Not Found" })
+    }
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error: " + e });
+  }  
+})
 
 router.post("/add", async function (req, res) {
   try {
@@ -46,7 +61,8 @@ router.post("/add", async function (req, res) {
   catch (e) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
-})
+});
+
 
 router.put("/edit", async function (req, res) {
   try {
