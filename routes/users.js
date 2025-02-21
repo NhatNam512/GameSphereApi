@@ -105,5 +105,25 @@ router.put("/addLocation", async function (req, res) {
   }
 })
 
+router.put("/edit", async function (req, res) {
+  try{
+    const {id, password, username, picUrl} = req.body;
+    const itemUpdate = await userModel.findById(id);
+
+    if(itemUpdate){
+      itemUpdate.username = username ? username : itemUpdate.username;
+      itemUpdate.password = password ? password : itemUpdate.password;
+      itemUpdate.picUrl = picUrl ? picUrl : itemUpdate.picUrl;
+
+      await itemUpdate.save();
+      res.status(200).json({ status: true, message: "Successfully" });
+    }
+    else{
+      res.status(404).json({ status: true, message: "Not Found User" });
+    }
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error" + e });
+  }
+})
 module.exports = router;
 
