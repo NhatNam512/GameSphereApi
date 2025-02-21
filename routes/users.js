@@ -103,7 +103,7 @@ router.put("/addLocation", async function (req, res) {
   }catch(e){
     res.status(400).json({ status: false, message: "Error" + e });
   }
-})
+});
 
 router.put("/edit", async function (req, res) {
   try{
@@ -120,6 +120,22 @@ router.put("/edit", async function (req, res) {
     }
     else{
       res.status(404).json({ status: true, message: "Not Found User" });
+    }
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error" + e });
+  }
+});
+
+router.get("/:id", async function (req, res) {
+  try{
+    const {id} = req.params;
+    var detail = await userModel.findById(id);
+
+    if (detail) {
+      res.status(200).json(detail);
+    }
+    else {
+      res.status(404).json({ status: true, message: "Not Found" })
     }
   }catch(e){
     res.status(400).json({ status: false, message: "Error" + e });
