@@ -132,7 +132,11 @@ router.get("/:id", async function (req, res) {
     var detail = await userModel.findById(id);
 
     if (detail) {
-      res.status(200).json(detail);
+      res.status(200).json({
+        status: true,
+        message: "Lấy người thành công",
+        data: detail
+      });
     }
     else {
       res.status(404).json({ status: true, message: "Not Found" })

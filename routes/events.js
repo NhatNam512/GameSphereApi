@@ -23,7 +23,11 @@ router.get("/detail/:id", async function (req, res) {
     var detail = await eventModel.findById(id);
 
     if (detail) {
-      res.status(200).json(detail);
+      res.status(200).json({
+        status: true,
+        message: "Lấy chi tiết sự kiện thành công",
+        data: detail
+      });
     }
     else {
       res.status(404).json({ status: true, message: "Not Found" })
@@ -38,7 +42,11 @@ router.get("/categories/:id", async function (req,  res) {
     const {id} = req.params;
     var categories = await eventModel.find({categories: id});
     if(categories.length>0){
-      res.status(200).json(categories)
+      res.status(200).json({
+        status: true,
+        message: "Lấy sự kiện thành công",
+        data: categories
+      })
     }
     else {
       res.status(404).json({ status: false, message: "Not Found" })

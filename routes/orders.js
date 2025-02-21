@@ -16,7 +16,7 @@ router.post("/createOrder", async function (req, res) {
         res.status(200).json({
             status: true,
             message: "Successfully",
-            orderId: createdOrder._id,
+            data: createdOrder._id,
         });
     } catch (e) {
         console.log(e);
@@ -91,7 +91,7 @@ router.post("/createTicket", async function (req, res) {
         await session.commitTransaction();
         session.endSession();
 
-        res.status(200).json({ success: true, ticket });
+        res.status(200).json({ success: true, data: ticket });
         
     } catch (e) {
         await session.abortTransaction();
