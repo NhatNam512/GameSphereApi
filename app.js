@@ -13,7 +13,6 @@ require("./models/eventModel");
 require("./models/orderModel");
 require("./models/ticketModel");
 
-
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var gamesRouter = require('./routes/games');
