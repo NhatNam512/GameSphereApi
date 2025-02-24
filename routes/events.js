@@ -59,7 +59,7 @@ router.get("/categories/:id", async function (req,  res) {
 router.post("/add", async function (req, res) {
   try {
     const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude } = req.body;
-    const newItem = { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude };
+    const newItem = { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude};
     await eventModel.create(newItem);
     res.status(200).json({
       status: true,

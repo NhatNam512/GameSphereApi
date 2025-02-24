@@ -19,6 +19,7 @@ const events = new schema({
     rating: { type: Number },
     longitude: { type: Number },
     latitude: { type: Number },
+    location: {type: String},
 });
 
 module.exports = mongoose.models.events || mongoose.model("events", events);
