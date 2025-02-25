@@ -46,9 +46,11 @@ router.post("/createTicket", async function (req, res) {
             return res.status(400).json({ success: false, message: "Thiếu thông tin bắt buộc." });
         }
         // Tìm đơn hàng
-        const order = await orderModel.findById(orderId);
-        if (!order) return res.status(404).json({ success: false, message: "Order not found" });
-
+        const order = await orderModel.findById(orderId).session(session);
+        if (!order) {
+            await session.abortTransaction();
+            return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng." });
+        }
         // Kiểm tra trạng thái đơn hàng
         if (order.status !== "pending") {
             await session.abortTransaction();
@@ -57,42 +59,46 @@ router.post("/createTicket", async function (req, res) {
 
         // Kiểm tra vé còn không
         const event = await Event.findById(order.eventId).session(session);
-        if (!event || event.soldTickets >= event.ticketQuantity) {
+        if (!event || event.soldTickets + order.amount >= event.ticketQuantity) {
             await session.abortTransaction();
-            return res.status(400).json({ success: false, message: "Hết vé" });
+            return res.status(400).json({ success: false, message: "Không đủ vé." });
         }
 
         // Cập nhật trạng thái đơn hàng
         order.status = "paid";
         await order.save({ session });
 
-        // Tạo mã QR
-        const qrCodeData = `event-${order.eventId}-user-${order.userId}`;
-        const qrCode = await QRCode.toDataURL(qrCodeData);
+        let tickets = [];
+        for (let i = 0; i < order.amout; i++) {
+            // Tạo mã QR
+            const qrCodeData = `event-${order.eventId}-user-${order.userId}`;
+            const qrCode = await QRCode.toDataURL(qrCodeData);
 
-        // Tạo số vé
-        const ticketNumber = await generateTicketNumber();
-        const ticket = new Ticket({ 
-            orderId: order._id, 
-            userId: order.userId, 
-            eventId: order.eventId, 
-            qrCode: qrCode, 
-            ticketNumber: ticketNumber,
-            status: "issued",
-            createAt: new Date(),
-        });
+            // Tạo số vé
+            const ticketNumber = await generateTicketNumber();
+            const ticket = new Ticket({
+                orderId: order._id,
+                userId: order.userId,
+                eventId: order.eventId,
+                qrCode: qrCode,
+                ticketNumber: ticketNumber,
+                status: "issued",
+                createAt: new Date(),
+            });
 
-        await ticket.save({ session });
+            await ticket.save({ session });
+            tickets.push(ticket);
+        }
 
         // Cập nhật số vé đã bán
-        event.soldTickets += 1;
+        event.soldTickets += order.amount;
         await event.save({ session });
-        
+
         await session.commitTransaction();
         session.endSession();
 
-        res.status(200).json({ success: true, data: ticket });
-        
+        res.status(200).json({ success: true, data: tickets });
+
     } catch (e) {
         await session.abortTransaction();
         session.endSession();
