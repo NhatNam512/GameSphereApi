@@ -11,6 +11,14 @@ const QRCode = require('qrcode');
 router.post("/createOrder", async function (req, res) {
     try {
         const { userId, eventId, amount } = req.body;
+        if (!userId || !eventId || !amount || amount < 1) {
+            return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc số lượng vé không hợp lệ." });
+        }
+        // Kiểm tra sự kiện còn vé không
+        const event = await Event.findById(eventId);
+        if (!event || event.soldTickets + amount > event.ticketQuantity) {
+            return res.status(400).json({ success: false, message: "Không đủ vé." });
+        }
         const newOrder = { userId, eventId, amount, status: "pending" };
         const createdOrder = await orderModel.create(newOrder);
         res.status(200).json({
