@@ -69,7 +69,7 @@ router.post("/createTicket", async function (req, res) {
         await order.save({ session });
 
         let tickets = [];
-        for (let i = 0; i < order.amout; i++) {
+        for (let i = 0; i < order.amount; i++) {
             // Tạo mã QR
             const qrCodeData = `event-${order.eventId}-user-${order.userId}`;
             const qrCode = await QRCode.toDataURL(qrCodeData);
