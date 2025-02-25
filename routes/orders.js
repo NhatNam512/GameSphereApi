@@ -110,7 +110,7 @@ router.post("/createTicket", async function (req, res) {
     } catch (e) {
         await session.abortTransaction();
         session.endSession();
-        console.error(error);
+        console.error(e);
         res.status(500).json({ success: false, message: "Lỗi khi tạo vé." });
     }
 });
