@@ -103,15 +103,16 @@ router.post("/createTicket", async function (req, res) {
         await event.save({ session });
 
         await session.commitTransaction();
-        session.endSession();
-
+        
         res.status(200).json({ success: true, data: tickets });
 
     } catch (e) {
         await session.abortTransaction();
-        session.endSession();
         console.error(e);
         res.status(500).json({ success: false, message: "Lỗi khi tạo vé." });
+    }
+    finally{
+        session.endSession();
     }
 });
 
