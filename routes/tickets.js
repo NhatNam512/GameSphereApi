@@ -6,70 +6,34 @@ const Ticket = require('../models/ticketModel');
 const Event = require('../models/eventModel')
 const mongoose = require('mongoose');
 
-router.get("/getTicket/:userId", async function (req, res) {
-    const tickets = await Ticket.find({ userId: req.params.userId }).populate("eventId");
-    res.json({ success: true, tickets });
+router.get("/all", async function (req, res) {
+    try{
+        const tickets = await Ticket.find();
+        res.status(200).json({
+            status: true,
+            message: "Lấy danh sách vé đã đặt thành công",
+            data: tickets
+          });
+    }
+    catch(e){
+        res.status(400).json({ status: false, message: "Lấy danh sách vé đã đặt thất bại" + e });
+    }
 })
 
-const generateTicketNumber = async () => {
-    let ticketNumber;
-    let isUnique = false;
-
-    while (!isUnique) {
-        ticketNumber = await Ticket.findOne().sort({ ticketNumber: -1 }).then(ticket => ticket ? ticket.ticketNumber + 1 : 100000);
-        const existingTicket = await Ticket.findOne({ ticketNumber });
-        isUnique = !existingTicket; // Kiểm tra xem số vé đã tồn tại hay chưa
+router.get("/getTicket/:userId", async function (req, res) {
+    try{
+        const tickets = await Ticket.find({ userId: req.params.userId });
+        if(tickets.length>0){
+            res.status(200).json({
+              status: true,
+              message: "Lấy vé thành công",
+              data: tickets
+            })
+          }
     }
-
-    return ticketNumber;
-};
-
-router.post("/createTicket", async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-        const { orderId, userId, eventId, quantity, ticketType, price, attendeeNames } = req.body;
-
-        // Tìm sự kiện
-        const event = await Event.findById(eventId);
-        if (!event) return res.status(404).json({ success: false, message: "Sự kiện không tồn tại" });
-
-        // Kiểm tra số vé còn lại
-        if (event.soldTickets + quantity > event.ticketQuantity) {
-            return res.status(400).json({ success: false, message: "Không đủ vé" });
-        }
-
-        let tickets = [];
-        for (let i = 0; i < quantity; i++) {
-            // Tạo số vé
-            const ticketNumber = await generateTicketNumber();
-            const ticket = new Ticket({
-                orderId,
-                userId,
-                eventId,
-                ticketNumber,
-                ticketType,
-                price,
-                attendeeName: attendeeNames[i] || `Khách ${i + 1}`, // Nếu không có tên thì đặt tên mặc định
-            });
-
-            tickets.push(ticket);
-        }
-
-        // Lưu tất cả vé vào DB
-        await Ticket.insertMany(tickets);
-
-        // Cập nhật số vé đã bán
-        await Event.findByIdAndUpdate(eventId, { $inc: { soldTickets: quantity } });
-
-        res.json({ success: true, tickets });
-    } catch (error) {
-        await session.abortTransaction();
-        console.error(error);
-        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo vé." + error });
-    } finally {
-        session.endSession();
+    catch(e){
+        res.status(404).json({ status: false, message: "Not Found" })
     }
-});
+})
 
 module.exports = router;
