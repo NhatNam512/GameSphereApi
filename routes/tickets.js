@@ -26,7 +26,7 @@ router.get("/getTicket/:userId", async function (req, res) {
         const userId = req.params.userId
 
         //Lấy thông tin người dùng
-        const user = await User.findOne({userId})
+        const user = await User.findOne({id: userId})
         if(!user) return res.status(404).json({error: "Not Found User"});
 
         //Lấy vé của user
