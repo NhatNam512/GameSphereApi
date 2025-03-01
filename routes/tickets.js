@@ -32,22 +32,27 @@ router.get("/getTicket/:userId", async function (req, res) {
         const tickets = await Ticket.find({ userId: userId });
         if(!tickets) return res.status(404).json({error: "Not Found Ticket"});
         //Lấy danh sách eventId duy nhất
-        const eventIds = [...new Set(tickets.map(t=>t.eventId))];
+        const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
         //Lấy thông tin sự kiện 
-        const events = await Event.find({_id: {$in: eventIds}});
+        const events = await Event.find({_id: {$in: eventIds}}).lean();
         //Gộp dữ liệu
         const result = {
             user,
-            events: events.map(event=>({
-                ...event,
-                tickets: tickets.filter(t=>t.eventId === event._id),
-            })),
+            events: events.map(event => {
+                const filteredTickets = tickets.filter(t => {
+                    return t.eventId.toString() === event._id.toString();
+                });
+                return {
+                    ...event,
+                    tickets: filteredTickets
+                };
+            }),
         }
-            res.status(200).json({
-              status: true,
-              message: "Lấy vé thành công",
-              data: result
-            })
+        res.status(200).json({
+            status: true,
+            message: "Lấy vé thành công",
+            data: result
+        })
     }
     catch(e){
         res.status(404).json({ status: false, message: "Not Found" })
