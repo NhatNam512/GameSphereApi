@@ -82,27 +82,25 @@ router.post("/createTicket", async function (req, res) {
             return res.status(400).json({ success: false, message: "Đơn hàng đã bị thay đổi trạng thái trước đó." });
         }
 
-        let tickets = [];
-        for (let i = 0; i < order.amount; i++) {
-            // Tạo mã QR
-            const qrCodeData = `event-${order.eventId}-user-${order.userId}`;
-            const qrCode = await QRCode.toDataURL(qrCodeData);
+        // Tạo số vé
+        const ticketNumber = await generateTicketNumber();
 
-            // Tạo số vé
-            const ticketNumber = await generateTicketNumber();
-            const ticket = new Ticket({
-                orderId: order._id,
-                userId: order.userId,
-                eventId: order.eventId,
-                qrCode: qrCode,
-                ticketNumber: ticketNumber,
-                status: "issued",
-                createdAt: new Date(),
-            });
+        // Tạo mã QR
+        const qrCodeData = `${ticketNumber}`;
+        const qrCode = await QRCode.toDataURL(qrCodeData);
 
-            await ticket.save();
-            tickets.push(ticket);
-        }
+        const ticket = new Ticket({
+            orderId: order._id,
+            userId: order.userId,
+            eventId: order.eventId,
+            qrCode: qrCode,
+            ticketNumber: ticketNumber,
+            amount: order.amount,
+            status: "issued",
+            createdAt: new Date(),
+        });
+
+        await ticket.save();
 
         // Cập nhật số vé đã bán
         const updatedEvent = await Event.updateOne(
@@ -114,7 +112,7 @@ router.post("/createTicket", async function (req, res) {
             return res.status(400).json({ success: false, message: "Không đủ vé, vui lòng thử lại." });
         }
 
-        res.status(200).json({ success: true, data: tickets });
+        res.status(200).json({ success: true, data: ticket });
 
     } catch (e) {
         console.log(e);

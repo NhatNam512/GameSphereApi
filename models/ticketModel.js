@@ -9,6 +9,7 @@ const ticket = new schema({
     qrCode: {type: String},
     ticketNumber: { type: Number },
     ticketType: {type: String},
+    amount: {type: Number},
     price: {type: Number},
     createdAt: { type: Date, default: Date.now }, 
     status: { type: String, enum: ["issued", "used"], default: "issued" },
