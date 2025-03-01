@@ -24,17 +24,17 @@ router.get("/all", async function (req, res) {
 router.get("/getTicket/:userId", async function (req, res) {
     try{
         const userId = req.params.userId
-
         //Lấy thông tin người dùng
-        const user = await User.findOne({id: userId})
+        const user = await User.findOne({_id: userId})
         if(!user) return res.status(404).json({error: "Not Found User"});
 
         //Lấy vé của user
         const tickets = await Ticket.find({ userId: userId });
+        if(!tickets) return res.status(404).json({error: "Not Found Ticket"});
         //Lấy danh sách eventId duy nhất
         const eventIds = [...new Set(tickets.map(t=>t.eventId))];
         //Lấy thông tin sự kiện 
-        const events = await Event.find({eventId: {$in: eventIds}});
+        const events = await Event.find({_id: {$in: eventIds}});
         //Gộp dữ liệu
         const result = {
             user,
