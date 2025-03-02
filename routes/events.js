@@ -105,4 +105,28 @@ router.put("/edit", async function (req, res) {
   }
 })
 
+router.get("/search", async function (req, res) {
+  try {
+    const { query } = req.query;
+    const events = await eventModel.find({
+      $or: [
+        { name: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } }
+      ]
+    });
+
+    if (events.length > 0) {
+      res.status(200).json({
+        status: true,
+        message: "Tìm kiếm sự kiện thành công",
+        data: events
+      });
+    } else {
+      res.status(404).json({ status: false, message: "Không tìm thấy sự kiện" });
+    }
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error: " + e });
+  }
+});
+
 module.exports = router;

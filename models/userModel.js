@@ -11,6 +11,7 @@ const user = new schema({
     createAt:{type: Date, default: Date.now()},
     updateAt:{type: Date, default: Date.now()},
     role: {type: Number},
+    notification: {type: []},
     longitude: { type: Number },
     latitude: { type: Number },
     ticketsHave: {type: [oid], ref: "tickets"}

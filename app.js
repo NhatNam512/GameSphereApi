@@ -4,6 +4,7 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
+var WebSocket = require('ws')
 
 const mongoose = require('mongoose');
 require("./models/userModel");
@@ -22,6 +23,37 @@ var ordersRouter = require('./routes/orders');
 var ticketsRouter = require('./routes/tickets');
 
 var app = express();
+var http = require('http');
+var server = http.createServer(app);
+var wss = new WebSocket.Server({ server });
+
+let clients = new Set();
+// Khi client kết nối WebSocket
+wss.on("connection", (ws) => {
+  console.log("🔗 Client connected");
+  clients.add(ws);
+
+  ws.on("message", (message) => {
+    console.log(`Received message => ${message}`);
+    // Xử lý message từ client
+  });
+
+  ws.on("close", () => {
+    console.log("❌ Client disconnected");
+    clients.delete(ws);
+  });
+});
+
+// Khởi động server HTTP
+server.listen(5000, () => {
+  console.log('Server is listening on port 5000');
+});
+
+clients.forEach(client => {
+  if (client.readyState === WebSocket.OPEN) {
+    client.send('Hello from server!');
+  }
+});
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -34,7 +66,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 //connect database
-mongoose.connect('mongodb+srv://namnnps38713:wcVNA8PAeuqTioxq@namnnps38713.bctmi.mongodb.net/gamesphere')
+mongoose.connect('mongodb://localhost:27017/gamesphere')
   .then(() => console.log('>>>>>>>>>> DB Connected!!!!!!'))
   .catch(err => console.log('>>>>>>>>> DB Error: ', err));
 
@@ -62,4 +94,4 @@ app.use(function(err, req, res, next) {
   res.render('error');
 });
 
-module.exports = app;
+module.exports = {app, wss};

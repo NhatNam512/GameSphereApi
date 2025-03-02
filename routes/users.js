@@ -4,6 +4,7 @@ const userModel = require("../models/userModel");
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
 const bcrypt = require('bcrypt')
+const { wss } = require('../app'); // Import the WebSocket server
 
 // Login
 router.get("/all", async function (req, res) {
@@ -145,5 +146,30 @@ router.get("/:id", async function (req, res) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
 })
+
+// API to send notification to WebSocket clients
+router.post("/notify", function (req, res) {
+  try {
+    const message = "Vé của bạn đã đặt thành công";
+    
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+
+    res.status(200).json({
+      status: true,
+      message: "Notification sent to all WebSocket clients"
+    });
+  } catch (error) {
+    console.error("Error sending notification:", error);
+    res.status(500).json({
+      status: false,
+      message: "Internal Server Error"
+    });
+  }
+});
+
 module.exports = router;
 
