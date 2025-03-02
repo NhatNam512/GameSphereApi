@@ -25,35 +25,35 @@ var ticketsRouter = require('./routes/tickets');
 var app = express();
 var http = require('http');
 var server = http.createServer(app);
-var wss = new WebSocket.Server({ server });
+// var wss = new WebSocket.Server({ server });
 
-let clients = new Set();
-// Khi client kết nối WebSocket
-wss.on("connection", (ws) => {
-  console.log("🔗 Client connected");
-  clients.add(ws);
+// let clients = new Set();
+// // Khi client kết nối WebSocket
+// wss.on("connection", (ws) => {
+//   console.log("🔗 Client connected");
+//   clients.add(ws);
 
-  ws.on("message", (message) => {
-    console.log(`Received message => ${message}`);
-    // Xử lý message từ client
-  });
+//   ws.on("message", (message) => {
+//     console.log(`Received message => ${message}`);
+//     // Xử lý message từ client
+//   });
 
-  ws.on("close", () => {
-    console.log("❌ Client disconnected");
-    clients.delete(ws);
-  });
-});
+//   ws.on("close", () => {
+//     console.log("❌ Client disconnected");
+//     clients.delete(ws);
+//   });
+// });
 
-// Khởi động server HTTP
-server.listen(5000, () => {
-  console.log('Server is listening on port 5000');
-});
+// // Khởi động server HTTP
+// server.listen(5000, () => {
+//   console.log('Server is listening on port 5000');
+// });
 
-clients.forEach(client => {
-  if (client.readyState === WebSocket.OPEN) {
-    client.send('Hello from server!');
-  }
-});
+// clients.forEach(client => {
+//   if (client.readyState === WebSocket.OPEN) {
+//     client.send('Hello from server!');
+//   }
+// });
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -94,4 +94,4 @@ app.use(function(err, req, res, next) {
   res.render('error');
 });
 
-module.exports = {app, wss};
+module.exports = app;
