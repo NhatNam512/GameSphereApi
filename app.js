@@ -66,7 +66,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 //connect database
-mongoose.connect('mongodb://localhost:27017/gamesphere')
+mongoose.connect('https://gamesphereapi.onrender.com/gamesphere')
   .then(() => console.log('>>>>>>>>>> DB Connected!!!!!!'))
   .catch(err => console.log('>>>>>>>>> DB Error: ', err));
 
