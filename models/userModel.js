@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const schema = mongoose.Schema;
 const oid = schema.ObjectId;
-const user = new schema({
+const users = new schema({
     id:{type:oid},
     email:{type:String},
     password:{type:String},
@@ -16,4 +16,4 @@ const user = new schema({
     latitude: { type: Number },
     ticketsHave: {type: [oid], ref: "tickets"}
 });
-module.exports = mongoose.model.user || mongoose.model("user", user);
+module.exports = mongoose.model.users || mongoose.model("users", users);
