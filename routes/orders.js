@@ -5,26 +5,25 @@ const config = require("../until/tokenConfig");
 const orderModel = require('../models/orderModel');
 const Ticket = require('../models/ticketModel');
 const Event = require('../models/eventModel');
-const User = require('../models/userModel');
 const mongoose = require('mongoose');
 const QRCode = require('qrcode');
 
-router.get("/getOrder", async function (req, res) {
-    try{
+router.get("/getOrders", async function (req, res) {
+    try {
         const orders = await orderModel.find()
-        .populate('eventId', 'name')
-        .populate('userId', 'name')
-        .populate('userId', 'email');
+            .populate('eventId', 'name')
+            .populate('userId', 'name email');
+
         return res.status(200).json({
             success: true,
             message: "Lấy đơn hàng thành công",
             data: orders
         });
-    }catch{
+    } catch (e) {
         console.log(e);
         return res.status(500).json({ success: false, message: "Lấy đơn hàng thất bại" });
     }
-})
+});
 
 router.post("/createOrder", async function (req, res) {
     try {
