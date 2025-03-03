@@ -20,8 +20,7 @@ router.get("/getOrders", async function (req, res) {
             data: orders
         });
     } catch (e) {
-        console.log(e);
-        return res.status(500).json({ success: false, message: "Lấy đơn hàng thất bại" });
+        return res.status(500).json({ success: false, message: "Lấy đơn hàng thất bại" + e});
     }
 });
 
