@@ -12,7 +12,7 @@ router.get("/getOrders", async function (req, res) {
     try {
         const orders = await orderModel.find()
             .populate('eventId', 'name')
-            .populate('userId', 'username email');
+            .populate('userId', 'email');
 
         return res.status(200).json({
             success: true,
