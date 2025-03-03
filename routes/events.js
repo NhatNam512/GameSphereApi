@@ -129,4 +129,23 @@ router.get("/search", async function (req, res) {
   }
 });
 
+router.get("/revenue", async function (req, res) {
+  try {
+    const events = await eventModel.find();
+    const revenueData = events.map(event => ({
+      id: event.id,
+      soldTickets: event.soldTickets,
+      revenue: event.ticketPrice * event.soldTickets
+    }));
+
+    res.status(200).json({
+      status: true,
+      message: "Tính doanh thu cho tất cả sự kiện thành công",
+      data: revenueData
+    });
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error: " + e });
+  }
+});
+
 module.exports = router;
