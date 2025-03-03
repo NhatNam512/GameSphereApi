@@ -131,12 +131,13 @@ router.get("/search", async function (req, res) {
 
 router.get("/revenue", async function (req, res) {
   try {
-    const events = await eventModel.find();
+    const events = await eventModel.find({ timeStart: { $lt: new Date() } });
     const revenueData = events.map(event => ({
       id: event._id,
       name: event.name,
       soldTickets: event.soldTickets,
-      revenue: event.ticketPrice * event.soldTickets
+      revenue: event.ticketPrice * event.soldTickets,
+      status: event.timeEnd < new Date() ? "End" : "Progress"
     }));
 
     res.status(200).json({
