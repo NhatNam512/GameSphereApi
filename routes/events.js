@@ -133,7 +133,7 @@ router.get("/revenue", async function (req, res) {
   try {
     const events = await eventModel.find();
     const revenueData = events.map(event => ({
-      id: event.id,
+      id: event._id,
       soldTickets: event.soldTickets,
       revenue: event.ticketPrice * event.soldTickets
     }));
