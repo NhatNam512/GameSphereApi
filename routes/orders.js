@@ -5,6 +5,7 @@ const config = require("../until/tokenConfig");
 const orderModel = require('../models/orderModel');
 const Ticket = require('../models/ticketModel');
 const Event = require('../models/eventModel');
+const User = require('../models/userModel');
 const mongoose = require('mongoose');
 const QRCode = require('qrcode');
 
@@ -12,7 +13,7 @@ router.get("/getOrders", async function (req, res) {
     try {
         const orders = await orderModel.find()
             .populate('eventId', 'name')
-            .populate('userId', 'email');
+            .populate('userId', 'username email');
 
         return res.status(200).json({
             success: true,
