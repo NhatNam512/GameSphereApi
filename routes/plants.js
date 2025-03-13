@@ -47,3 +47,5 @@ router.post('/add', async function (req, res) {
         res.status(400).json({ status: false, message: "Thêm sản phẩm thất bại" + e });
     }
 })
+
+module.exports = router;
