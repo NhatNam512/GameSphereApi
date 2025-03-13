@@ -111,9 +111,10 @@ router.put("/edit", async function (req, res) {
     const {id, password, username, picUrl} = req.body;
     const itemUpdate = await userModel.findById(id);
 
+    const hashedPassword = await bcrypt.hash(password, 10);
     if(itemUpdate){
       itemUpdate.username = username ? username : itemUpdate.username;
-      itemUpdate.password = password ? password : itemUpdate.password;
+      itemUpdate.password = hashedPassword ? hashedPassword : itemUpdate.password;
       itemUpdate.picUrl = picUrl ? picUrl : itemUpdate.picUrl;
 
       await itemUpdate.save();
