@@ -27,7 +27,7 @@ router.get('/detail/:id', async function (req, res) {
         });
     }
     else{
-        res.status(300).json({ status: false, message: "Không thấy sản phẩm"});
+        res.status(404).json({ status: false, message: "Không thấy sản phẩm"});
     }
     }catch(e){
         res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại" + e });

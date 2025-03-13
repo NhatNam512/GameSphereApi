@@ -108,7 +108,7 @@ router.put("/addLocation", async function (req, res) {
 
 router.put("/edit", async function (req, res) {
   try{
-    const {id, password, username, picUrl} = req.body;
+    const {id, checkPassword, password, username, picUrl} = req.body;
     const itemUpdate = await userModel.findById(id);
 
     if(itemUpdate){
@@ -128,6 +128,32 @@ router.put("/edit", async function (req, res) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
 });
+
+router.put("/editPassword", async function (req, res) {
+  try{
+    const {id, currentPassword, newPassword, } = req.body;
+    const itemUpdate = await userModel.findById(id);
+    // So sánh mật khẩu đã mã hóa
+    const isPasswordValid = await bcrypt.compare(currentPassword, itemUpdate.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ status: false, message: "Mật khẩu không đúng" });
+    }
+    else{
+      if(itemUpdate){
+        if (newPassword) {
+          itemUpdate.password = await bcrypt.hash(newPassword, 10);
+        }
+        await itemUpdate.save();
+        res.status(200).json({ status: true, message: "Successfully" });
+      }
+      else{
+        res.status(404).json({ status: true, message: "Not Found User" });
+      }
+    }
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error" + e });
+  }
+})
 
 router.get("/:id", async function (req, res) {
   try{
