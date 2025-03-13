@@ -5,7 +5,7 @@ const oid = schema.ObjectId;
 const plants = new schema({
     id: { type: oid },
     name: { type: String},
-    type: { type: [String] },
+    type: { type: [String], ref: "plantCategories"},
     price: { type: Number },
     quantity: { type: Number },
     size: { type: String },
