@@ -46,6 +46,29 @@ router.post('/add', async function (req, res) {
     }catch(e){
         res.status(400).json({ status: false, message: "Thêm sản phẩm thất bại" + e });
     }
-})
+});
+
+router.get("/search", async function (req, res) {
+    try {
+      const { query } = req.query;
+      const plants = await plantModel.find({
+        $or: [
+          { name: { $regex: query, $options: "i" } },
+        ]
+      });
+  
+      if (plants.length > 0) {
+        res.status(200).json({
+          status: true,
+          message: "Tìm kiếm sản phẩm thành công",
+          data: plants
+        });
+      } else {
+        res.status(404).json({ status: false, message: "Không tìm thấy sản phẩm" });
+      }
+    } catch (e) {
+      res.status(400).json({ status: false, message: "Error: " + e });
+    }
+  });
 
 module.exports = router;

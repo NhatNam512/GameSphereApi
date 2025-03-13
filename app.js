@@ -14,6 +14,7 @@ require("./models/eventModel");
 require("./models/orderModel");
 require("./models/ticketModel");
 require("./models/plantModel");
+require("./models/plantCategoryModel");
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -23,6 +24,7 @@ var eventsRouter = require('./routes/events');
 var ordersRouter = require('./routes/orders');
 var ticketsRouter = require('./routes/tickets');
 var plantsRounter = require('./routes/plants');
+var plantCategoriesRouter = require('./routes/plantCategories');
 
 var app = express();
 var http = require('http');
@@ -80,6 +82,7 @@ app.use('/events', eventsRouter);
 app.use('/orders', ordersRouter);
 app.use('/tickets', ticketsRouter);
 app.use('/plants', plantsRounter);
+app.use('/plantCategories', plantCategoriesRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
