@@ -5,40 +5,34 @@ const categoryModel = require('../models/plantCategoryModel');
 
 router.get('/all', async function (req, res) {
     try{
-        const plants = await plantModel.find();
-        // Lấy danh mục cho từng loại cây
-        const categories = await categoryModel.find({ _id: { $in: plants.map(plant => plant.type) } });
-        
-        // Tạo một đối tượng danh mục với tên
-        const categoriesNames = categories.map(category => category.name);
+        // Sử dụng populate để lấy danh mục tương ứng với loại cây
+        const plants = await plantModel.find().populate('plantCategories');
 
         res.status(200).json({
             status: true,
             message: 'Lấy sản phẩm thành công',
             data: {
               plants,
-              categories: categoriesNames // Trả về danh sách tên danh mục
+              // Lấy tên danh mục từ các cây đã được populate
+              categories: plants.map(plant => plant.type.name) // Giả sử type là một đối tượng với thuộc tính name
             }
         });
     }catch(e){
-        res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại" + e });
+        res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại: " + e.message });
     }
 });
 
 router.get('/detail/:id', async function (req, res) {
     try{
         const { id }= req.params;
-        const plant = await plantModel.findById(id);
-        const categories = await categoryModel.find({ _id: { $in: plant.map(plant => plant.type) } });
-        // Tạo một đối tượng danh mục với tên
-        const categoriesNames = categories.map(category => category.name);
+        const plant = await plantModel.findById(id).populate('plantCategories');
         if(plant){
         res.status(200).json({
             status: true,
             message: 'Lấy sản phẩm thành công',
             data: {
-              plant,
-              categories: categoriesNames // Trả về danh sách tên danh mục
+              plant,// Trả về danh sách tên danh mục
+              categories: plant.type.name
             }
         });
     }
