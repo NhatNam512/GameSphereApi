@@ -7,7 +7,7 @@ router.get('/all', async function (req, res) {
     try{
         const plants = await plantModel.find();
         // Lấy danh mục cho từng loại cây
-        const categories = await categoryModel.find({id: { $in: plants.map(plant => plant.type) } });
+        const categories = await categoryModel.find({ _id: { $in: plants.map(plant => plant.type) } });
         
         // Tạo một đối tượng danh mục với tên
         const categoriesNames = categories.map(category => category.name);
@@ -29,7 +29,7 @@ router.get('/detail/:id', async function (req, res) {
     try{
         const { id }= req.params;
         const plant = await plantModel.findById(id);
-        const categories = await categoryModel.find({id: { $in: plant.map(plant => plant.type) } });
+        const categories = await categoryModel.find({ _id: { $in: plant.map(plant => plant.type) } });
         // Tạo một đối tượng danh mục với tên
         const categoriesNames = categories.map(category => category.name);
         if(plant){
