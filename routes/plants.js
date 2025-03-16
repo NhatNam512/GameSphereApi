@@ -6,7 +6,7 @@ const categoryModel = require('../models/plantCategoryModel');
 router.get('/all', async function (req, res) {
     try{
         // Sử dụng populate để lấy danh mục tương ứng với loại cây
-        const plants = await plantModel.find().populate('plantCategories');
+        const plants = await plantModel.find().populate('type');
 
         res.status(200).json({
             status: true,
@@ -25,7 +25,7 @@ router.get('/all', async function (req, res) {
 router.get('/detail/:id', async function (req, res) {
     try{
         const { id }= req.params;
-        const plant = await plantModel.findById(id).populate('plantCategories');
+        const plant = await plantModel.findById(id).populate('type');
         if(plant){
         res.status(200).json({
             status: true,
