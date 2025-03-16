@@ -6,7 +6,6 @@ const orderModel = require('../models/orderModel');
 const Ticket = require('../models/ticketModel');
 const Event = require('../models/eventModel');
 const User = require('../models/userModel');
-const mongoose = require('mongoose');
 const QRCode = require('qrcode');
 
 router.get("/getOrders", async function (req, res) {

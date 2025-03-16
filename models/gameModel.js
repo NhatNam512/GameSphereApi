@@ -14,6 +14,7 @@ const gameSchema = new schema({
     categories: { type: [oid], ref: "categories" }, // Defining categories as an array of strings
     newReleases: { type: Boolean },
     upComing: { type: Boolean },
+    urlDownload: { type: String },
 });
 
 module.exports = mongoose.models.game || mongoose.model("game", gameSchema);
