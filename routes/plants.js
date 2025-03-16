@@ -1,15 +1,25 @@
 var express = require('express');
 var router = express.Router();
 const plantModel = require('../models/plantModel');
+const categoryModel = require('../models/plantCategoryModel');
 
 router.get('/all', async function (req, res) {
     try{
         const plants = await plantModel.find();
+        // Lấy danh mục cho từng loại cây
+        const categories = await categoryModel.find({ _id: { $in: plants.map(plant => plant.type) } });
+        
+        // Tạo một đối tượng danh mục với tên
+        const categoriesNames = categories.map(category => category.name);
+
         res.status(200).json({
             status: true,
             message: 'Lấy sản phẩm thành công',
-            data: plants
-        })
+            data: {
+              plants,
+              categories: categoriesNames // Trả về danh sách tên danh mục
+            }
+        });
     }catch(e){
         res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại" + e });
     }
@@ -19,11 +29,17 @@ router.get('/detail/:id', async function (req, res) {
     try{
         const { id }= req.params;
         const plant = await plantModel.findById(id);
+        const categories = await categoryModel.find({ _id: { $in: plants.map(plant => plant.type) } });
+        // Tạo một đối tượng danh mục với tên
+        const categoriesNames = categories.map(category => category.name);
         if(plant){
         res.status(200).json({
             status: true,
             message: 'Lấy sản phẩm thành công',
-            data: plant
+            data: {
+              plant,
+              categories: categoriesNames // Trả về danh sách tên danh mục
+            }
         });
     }
     else{
