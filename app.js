@@ -25,7 +25,7 @@ var ordersRouter = require('./routes/orders');
 var ticketsRouter = require('./routes/tickets');
 var plantsRounter = require('./routes/plants');
 var plantCategoriesRouter = require('./routes/plantCategories');
-var paymentRouter = require("./routes/payment");
+var paymentRouter = require("./routes/payments");
 
 var app = express();
 var http = require('http');
