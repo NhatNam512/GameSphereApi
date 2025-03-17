@@ -6,7 +6,7 @@ const users = new schema({
     email:{type:String},
     password:{type:String},
     username:{type:String},
-    follower:{typep:Number},
+    follower:{type:Number},
     picUrl:{type:String},
     createAt:{type: Date, default: Date.now()},
     updateAt:{type: Date, default: Date.now()},
@@ -14,6 +14,8 @@ const users = new schema({
     notification: {type: []},
     longitude: { type: Number },
     latitude: { type: Number },
-    ticketsHave: {type: [oid], ref: "tickets"}
+    ticketsHave: {type: [oid], ref: "tickets"},
+    phoneNumber: {type: Number},
+    address: {type: String},
 });
 module.exports = mongoose.model.users || mongoose.model("users", users);

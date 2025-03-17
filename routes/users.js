@@ -108,7 +108,7 @@ router.put("/addLocation", async function (req, res) {
 
 router.put("/edit", async function (req, res) {
   try{
-    const {id, checkPassword, password, username, picUrl} = req.body;
+    const {id, checkPassword, password, username, picUrl, phoneNumber, address} = req.body;
     const itemUpdate = await userModel.findById(id);
 
     if(itemUpdate){
@@ -117,6 +117,8 @@ router.put("/edit", async function (req, res) {
         itemUpdate.password = await bcrypt.hash(password, 10);
       }
       itemUpdate.picUrl = picUrl ? picUrl : itemUpdate.picUrl;
+      itemUpdate.phoneNumber = phoneNumber ? phoneNumber : itemUpdate.phoneNumber;
+      itemUpdate.address = address ? address : itemUpdate.address;
 
       await itemUpdate.save();
       res.status(200).json({ status: true, message: "Successfully" });
