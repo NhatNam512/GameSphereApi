@@ -51,7 +51,7 @@ router.post("/login", async function (req, res) {
 // Register
 router.post("/register", async function (req, res) {
   try {
-    const { email, password, username } = req.body;
+    const { email, password, username, phoneNumber } = req.body;
     // Check if user already exists
     const existingUser = await userModel.findOne({ email: email });
     if (existingUser) {
@@ -68,6 +68,7 @@ router.post("/register", async function (req, res) {
       email: email,
       password: hashedPassword,
       username: username,
+      phoneNumber: phoneNumber,
       role: 3,
     });
 
