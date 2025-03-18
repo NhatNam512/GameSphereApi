@@ -13,8 +13,6 @@ router.get('/all', async function (req, res) {
             message: 'Lấy sản phẩm thành công',
             data: {
               plants,
-              // Lấy tên danh mục từ các cây đã được populate
-              categories: plants.map(plant => plant.type.name) // Giả sử type là một đối tượng với thuộc tính name
             }
         });
     }catch(e){
@@ -31,8 +29,7 @@ router.get('/detail/:id', async function (req, res) {
             status: true,
             message: 'Lấy sản phẩm thành công',
             data: {
-              plant,// Trả về danh sách tên danh mục
-              categories: plant.type.name
+              plant
             }
         });
     }
