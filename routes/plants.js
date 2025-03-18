@@ -11,26 +11,21 @@ router.get('/all', async function (req, res) {
         res.status(200).json({
             status: true,
             message: 'Lấy sản phẩm thành công',
-            data: {
-              plants,
-            }
+            plants
         });
     }catch(e){
         res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại: " + e.message });
     }
 });
-
 router.get('/detail/:id', async function (req, res) {
     try{
-        const { id }= req.params;
+      const { id }= req.params;
         const plant = await plantModel.findById(id).populate('type');
         if(plant){
         res.status(200).json({
             status: true,
             message: 'Lấy sản phẩm thành công',
-            data: {
-              plant
-            }
+            plant
         });
     }
     else{
