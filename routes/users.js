@@ -75,7 +75,7 @@ router.post("/register", async function (req, res) {
     // Save user to database
     await newUser.save();
 
-    res.status(201).json({
+    res.status(200).json({
       status: true,
       message: "Tạo tài khoản thành công"
     });

@@ -26,6 +26,7 @@ var ticketsRouter = require('./routes/tickets');
 var plantsRounter = require('./routes/plants');
 var plantCategoriesRouter = require('./routes/plantCategories');
 var paymentRouter = require("./routes/payments");
+var emailRouter = require("./routes/emails");
 
 var app = express();
 var http = require('http');
@@ -85,6 +86,7 @@ app.use('/tickets', ticketsRouter);
 app.use('/plants', plantsRounter);
 app.use('/plantCategories', plantCategoriesRouter);
 app.use("/payments", paymentRouter);
+app.use("/emails", emailRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
