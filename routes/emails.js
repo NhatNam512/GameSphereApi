@@ -37,7 +37,7 @@ router.post("send-otp", async function (req, res) {
     }
 });
 
-app.post("/verify-otp", (req, res) => {
+router.post("/verify-otp", async function(req, res) {
     const { email, otp } = req.body;
     const storedOtp = otpStorage.get(email);
   
