@@ -16,7 +16,7 @@ const transporter = nodemailer.createTransport({
 
 const otpStorage = new Map();
 
-router.post("send-otp", async function (req, res) {
+router.post("/send-otp", async function (req, res) {
     const {email} = req.body;
     if (!email) return res.status(400).json({ message: "Bắt buộc có email" });
 
