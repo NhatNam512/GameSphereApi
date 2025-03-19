@@ -3,6 +3,8 @@ const express = require("express");
 var router = express.Router();
 const nodemailer = require("nodemailer");
 const cryto = require("crypto");
+const sgMail = require("@sendgrid/mail");
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -24,12 +26,18 @@ router.post("/send-otp", async function (req, res) {
     otpStorage.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
 
     try{
-        await transporter.sendMail({
+        // await transporter.sendMail({
+        //     from: process.env.SMTP_USER,
+        //     to: email,
+        //     subject: "Your OTP Code",
+        //     text: `Your OTP code is ${otp}. It will expire in 5 minutes.`,
+        // });  
+        await sgMail.send({
             from: process.env.SMTP_USER,
             to: email,
             subject: "Your OTP Code",
             text: `Your OTP code is ${otp}. It will expire in 5 minutes.`,
-        });
+        })
         res.status(200).json({ message: "OTP sent successfully" });
     }
     catch (error) {
