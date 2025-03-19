@@ -33,7 +33,10 @@ router.post("/send-otp", async function (req, res) {
         //     text: `Your OTP code is ${otp}. It will expire in 5 minutes.`,
         // });  
         await sgMail.send({
-            from: process.env.SMTP_USER,
+            from: {
+                email: "namnnps38713@gmail.com",
+                name: "EventSphere"
+            },
             to: email,
             subject: "Your OTP Code",
             text: `Your OTP code is ${otp}. It will expire in 5 minutes.`,
