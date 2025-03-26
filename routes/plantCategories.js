@@ -1,6 +1,6 @@
 var express = require('express');
 var router = express.Router();
-const plantCategoryModel = require('../models/plantCategoryModel');
+const plantCategoryModel = require('../models/plants/plantCategoryModel');
 
 router.get("/all", async function (req, res) {
   try {

@@ -2,8 +2,8 @@ var express = require('express');
 var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
-const cartModel = require('../models/cartModel');
-const plantModel = require('../models/plantModel');
+const cartModel = require('../models/plants/cartModel');
+const plantModel = require('../models/plants/plantModel');
 
 router.post("/add", async (req, res) => {
     const { userId, productId, quantity } = req.body;

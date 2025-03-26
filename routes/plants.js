@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
-const plantModel = require('../models/plantModel');
-const categoryModel = require('../models/plantCategoryModel');
+const plantModel = require('../models/plants/plantModel');
+const categoryModel = require('../models/plants/plantCategoryModel');
 
 router.get('/all', async function (req, res) {
     try{

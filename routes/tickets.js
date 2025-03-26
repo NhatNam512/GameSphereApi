@@ -2,8 +2,8 @@ var express = require('express');
 var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
-const Ticket = require('../models/ticketModel');
-const Event = require('../models/eventModel')
+const Ticket = require('../models/events/ticketModel');
+const Event = require('../models/events/eventModel')
 const User = require('../models/userModel');
 const mongoose = require('mongoose');
 

@@ -20,6 +20,7 @@ const events = new schema({
     longitude: { type: Number },
     latitude: { type: Number },
     location: {type: String},
+    userId: {type: String, ref: "users"},
 });
 
 module.exports = mongoose.models.events || mongoose.model("events", events);

@@ -7,18 +7,20 @@ var cors = require('cors');
 var WebSocket = require('ws')
 
 const mongoose = require('mongoose');
+const redis = require("./redis/redisClient");
 require("./models/userModel");
-require("./models/gameModel");
-require("./models/categoryModel");
-require("./models/eventModel");
-require("./models/orderModel");
-require("./models/ticketModel");
-require("./models/plantModel");
-require("./models/plantCategoryModel");
+require("./models/events/categoryModel");
+require("./models/events/eventModel");
+require("./models/events/orderModel");
+require("./models/events/ticketModel");
+require("./models/plants/plantModel");
+require("./models/plants/plantCategoryModel");
+require("./models/games/gameModel");
+require("./models/games/previewGameModel");
+require("./models/games/categoriesGameModel");
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
-var gamesRouter = require('./routes/games');
 var categoriesRouter = require('./routes/categories');
 var eventsRouter = require('./routes/events');
 var ordersRouter = require('./routes/orders');
@@ -27,39 +29,13 @@ var plantsRounter = require('./routes/plants');
 var plantCategoriesRouter = require('./routes/plantCategories');
 var paymentRouter = require("./routes/payments");
 var emailRouter = require("./routes/emails");
+var gamesRouter = require('./routes/games');
+var recommendRouter = require("./routes/recommendation");
+var categoriesGamesRouter = require('./routes/categoriesGames');
 
 var app = express();
 var http = require('http');
 var server = http.createServer(app);
-// var wss = new WebSocket.Server({ server });
-
-// let clients = new Set();
-// // Khi client kết nối WebSocket
-// wss.on("connection", (ws) => {
-//   console.log("🔗 Client connected");
-//   clients.add(ws);
-
-//   ws.on("message", (message) => {
-//     console.log(`Received message => ${message}`);
-//     // Xử lý message từ client
-//   });
-
-//   ws.on("close", () => {
-//     console.log("❌ Client disconnected");
-//     clients.delete(ws);
-//   });
-// });
-
-// // Khởi động server HTTP
-// server.listen(5000, () => {
-//   console.log('Server is listening on port 5000');
-// });
-
-// clients.forEach(client => {
-//   if (client.readyState === WebSocket.OPEN) {
-//     client.send('Hello from server!');
-//   }
-// });
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -87,6 +63,8 @@ app.use('/plants', plantsRounter);
 app.use('/plantCategories', plantCategoriesRouter);
 app.use("/payments", paymentRouter);
 app.use("/emails", emailRouter);
+app.use("/recommend", recommendRouter);
+app.use("/categories_games", categoriesGamesRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));

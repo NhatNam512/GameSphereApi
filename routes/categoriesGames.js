@@ -2,7 +2,7 @@ var express = require('express');
 var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
-const categoryModel = require('../models/events/categoryModel');
+const categoryModel = require('../models/games/categoriesGameModel');
 
 router.get("/all", async function (req, res) {
   try {
@@ -18,8 +18,8 @@ router.get("/all", async function (req, res) {
 
 router.post("/add", async function (req, res) {
   try {
-    const { name, image } = req.body;
-    const newItem = { name, image };
+    const { name} = req.body;
+    const newItem = { name };
     await categoryModel.create(newItem);
     res.status(200).json({ status: true, message: "Successfully" });
   }

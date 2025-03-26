@@ -2,9 +2,9 @@ var express = require('express');
 var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
-const orderModel = require('../models/orderModel');
-const Ticket = require('../models/ticketModel');
-const Event = require('../models/eventModel');
+const orderModel = require('../models/events/orderModel');
+const Ticket = require('../models/events/ticketModel');
+const Event = require('../models/events/eventModel');
 const User = require('../models/userModel');
 const QRCode = require('qrcode');
 

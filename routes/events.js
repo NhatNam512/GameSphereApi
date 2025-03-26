@@ -2,11 +2,36 @@ var express = require('express');
 var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
-const eventModel = require('../models/eventModel');
+const eventModel = require('../models/events/eventModel');
+const redis = require('../redis/redisClient');
+const natural = require("natural");
+const {updateEventVector} = require("../service/contentBased");
+
+const pub = redis.duplicate(); // Redis Publisher
+const sub = redis.duplicate();
+
+sub.subscribe("event_updates");
+
+sub.on("message", (channel, message) => {
+  if (channel === "event_updates") {
+    const event = JSON.parse(message);
+    console.log("📢 Sự kiện mới được cập nhật:", event);
+    // Có thể gửi thông báo đến frontend qua WebSocket
+  }
+});
 
 router.get("/all", async function (req, res) {
   try {
+    const cacheKey = "events";
+    const cachedData = await redis.get(cacheKey);
+
+    if (cachedData) {
+      console.log("Lấy dữ liệu từ cache Redis");
+      return res.json(JSON.parse(cachedData));
+    }
+
     const events = await eventModel.find();
+    await redis.set(cacheKey, JSON.stringify(events));
     res.status(200).json({
       status: true,
       message: "Lấy danh sách sự kiện thành công",
@@ -58,9 +83,13 @@ router.get("/categories/:id", async function (req,  res) {
 
 router.post("/add", async function (req, res) {
   try {
-    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude } = req.body;
-    const newItem = { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude};
-    await eventModel.create(newItem);
+    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId } = req.body;
+    const newItem = await eventModel.create({ name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId});
+    // Xóa cache để cập nhật danh sách mới
+    await redis.del("events");
+    await updateEventVector(newItem._id.toString(), description);
+    // Gửi thông báo đến Redis Pub/Sub
+    pub.publish("event_updates", JSON.stringify(newItem));
     res.status(200).json({
       status: true,
       message: "Successfully"
@@ -150,4 +179,31 @@ router.get("/revenue", async function (req, res) {
   }
 });
 
+// const redisClient = new redis();
+// async function saveEventToStream(event) {
+//   await redisClient.xadd("event_stream", "*", "title", event.name, "category", event.categories)
+// }
+// router.post("/events", async (req, res) => {
+//   try {
+//     const event = await Event.create(req.body);
+//     await saveEventToStream(event); // Lưu vào Redis Stream
+//     pub.publish("event_updates", JSON.stringify(event));
+//     res.status(201).json(event);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+// async function getRecentEvents(limit = 5) {
+//   const events = await redisClient.xrevrange("event_stream", "+", "-", "COUNT", limit);
+//   return events.map(([id, data]) => ({
+//     id,
+//     title: data[1],
+//     category: data[3],
+//   }));
+// }
+
+// router.get("/suggested-events", async (req, res) => {
+//   const recentEvents = await getRecentEvents();
+//   res.json(recentEvents);
+// });
 module.exports = router;
