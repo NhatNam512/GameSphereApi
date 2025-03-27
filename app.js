@@ -4,10 +4,10 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
-var WebSocket = require('ws')
 
 const mongoose = require('mongoose');
-const redis = require("./redis/redisClient");
+const {initializeSocket } = require("./socket/socket");
+
 require("./models/userModel");
 require("./models/events/categoryModel");
 require("./models/events/eventModel");
@@ -18,6 +18,7 @@ require("./models/plants/plantCategoryModel");
 require("./models/games/gameModel");
 require("./models/games/previewGameModel");
 require("./models/games/categoriesGameModel");
+require("./models/games/previewGameModel")
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -32,10 +33,12 @@ var emailRouter = require("./routes/emails");
 var gamesRouter = require('./routes/games');
 var recommendRouter = require("./routes/recommendation");
 var categoriesGamesRouter = require('./routes/categoriesGames');
+var previewGameRouter = require('./routes/previewGame');
 
 var app = express();
 var http = require('http');
 var server = http.createServer(app);
+var io = initializeSocket(server);
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -65,6 +68,7 @@ app.use("/payments", paymentRouter);
 app.use("/emails", emailRouter);
 app.use("/recommend", recommendRouter);
 app.use("/categories_games", categoriesGamesRouter);
+app.use("/previewGame", previewGameRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
