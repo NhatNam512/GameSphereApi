@@ -4,7 +4,11 @@ let io;
 
 function initializeSocket(server) {
     io = new Server(server, {
-        cors: { origin: "*" }
+        cors: { origin: "*" },
+        transports: ["websocket", "polling"], // Hỗ trợ cả WebSocket và Polling
+        pingInterval: 25000, // Khoảng thời gian gửi ping kiểm tra kết nối
+        pingTimeout: 5000, // Thời gian timeout nếu client không phản hồi
+        allowEIO3: true, // Hỗ trợ phiên bản cũ của Engine.io nếu cần
     });
 
     io.on("connection", (socket) => {
