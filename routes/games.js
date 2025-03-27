@@ -6,7 +6,7 @@ const gameModel = require('../models/games/gameModel');
 
 router.get("/all", async function (req, res) {
   try{
-  const games = await gameModel.find().populate('categories_games');
+  const games = await gameModel.find().populate('categoriesGames');
   res.status(200).json({
     status: true,
     message: "Lấy danh sách games thành công",
@@ -80,7 +80,7 @@ router.put("/update/:id", async (req, res) => {
 router.get('/detail/:id', async function (req, res) {
   try{
     const { id }= req.params;
-      const game = await gameModel.findById(id).populate('categories_games');
+      const game = await gameModel.findById(id).populate('categoriesGames');
       if(game){
       res.status(200).json({
           status: true,
