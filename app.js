@@ -38,6 +38,8 @@ var previewGameRouter = require('./routes/previewGame');
 var app = express();
 var http = require('http');
 var server = http.createServer(app);
+initializeSocket(server);
+
 const io = initializeSocket(server);
 io.on("connection", (socket) => {
     console.log("Client đã kết nối:", socket.id);
