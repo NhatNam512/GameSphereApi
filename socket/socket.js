@@ -10,9 +10,26 @@ function initializeSocket(server) {
     io.on("connection", (socket) => {
         console.log("Client kết nối:", socket.id);
 
-        socket.on("disconnect", () => {
-            console.log("Client ngắt kết nối:", socket.id);
+        // Thêm nhiều log để debug
+        socket.on("connect_error", (error) => {
+            console.error("Socket kết nối lỗi:", error);
         });
+
+        socket.on("disconnect", (reason) => {
+            console.log("Client ngắt kết nối:", socket.id, "Lý do:", reason);
+        });
+
+        // Ví dụ về việc bắt và log các sự kiện khác
+        socket.on("error", (error) => {
+            console.error("Lỗi socket:", error);
+        });
+    });
+
+    // Thêm log toàn cục cho kết nối
+    io.engine.on("connection_error", (err) => {
+        console.log("Lỗi kết nối socket toàn cục:", err.message);
+        console.log("Mã lỗi:", err.code);
+        console.log("Chi tiết lỗi:", err);
     });
 
     return io;
