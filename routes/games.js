@@ -17,6 +17,22 @@ router.get("/all", async function (req, res) {
   }
 });
 
+router.get("/home", async function (req, res) {
+  try{
+  const games = await gameModel.find()
+  .populate('categories')
+  .select("_id name avatar background categories description createdAt updatedAt");
+
+  res.status(200).json({
+    status: true,
+    message: "Lấy danh sách games thành công",
+    data: games 
+  });
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error" + e});
+  }
+});
+
 router.post("/add", async (req, res) => {
   try {
     const { name, description, developer, size, urlDownload, categories, avatar, video, background, screenshot, timeReleases, upComing } = req.body;
@@ -77,6 +93,7 @@ router.put("/update/:id", async (req, res) => {
     res.status(500).json({ status: false, message: "Lỗi server: " + error.message });
   }
 });
+
 router.get('/detail/:id', async function (req, res) {
   try{
     const { id }= req.params;
@@ -85,7 +102,7 @@ router.get('/detail/:id', async function (req, res) {
       res.status(200).json({
           status: true,
           message: 'Lấy sản phẩm thành công',
-          game
+          data: game
       });
   }
   else{
