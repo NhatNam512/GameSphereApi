@@ -6,7 +6,7 @@ const gameModel = require('../models/games/gameModel');
 
 router.get("/all", async function (req, res) {
   try{
-  const games = await gameModel.find();
+  const games = await gameModel.find().populate('categories_games');
   res.status(200).json({
     status: true,
     message: "Lấy danh sách games thành công",
@@ -77,5 +77,23 @@ router.put("/update/:id", async (req, res) => {
     res.status(500).json({ status: false, message: "Lỗi server: " + error.message });
   }
 });
+router.get('/detail/:id', async function (req, res) {
+  try{
+    const { id }= req.params;
+      const game = await gameModel.findById(id).populate('categories_games');
+      if(game){
+      res.status(200).json({
+          status: true,
+          message: 'Lấy sản phẩm thành công',
+          game
+      });
+  }
+  else{
+      res.status(404).json({ status: false, message: "Không thấy sản phẩm"});
+  }
+  }catch(e){
+      res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại" + e });
+  }
+})
 
 module.exports = router;
