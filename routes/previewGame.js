@@ -10,10 +10,6 @@ router.post("/post", async (req, res) => {
             userId, gameId, comment, rating, image
         });
         await newPost.save();
-
-        const io = getSocketIO();
-        io.emit("new_review", newPost);
-
         res.status(200).json({ status: true, message: "Đăng bài thành công", data: newPost});
     }catch(e){
         res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
