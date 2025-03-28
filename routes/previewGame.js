@@ -54,7 +54,7 @@ router.get("/all", async (req, res) => {
 router.get("/:gameId", async (req, res) => {
     try {
         const { gameId } = req.params;
-        const reviews = await previewModel.find({ gameId }).populate("userId");
+        const reviews = await previewModel.find({ gameId }).populate("userId", "username email picUrl");
 
         res.status(200).json({
             status: true,
