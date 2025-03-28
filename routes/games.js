@@ -3,6 +3,7 @@ var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
 const gameModel = require('../models/games/gameModel');
+const PreviewGame = require('../models/games/previewGameModel');
 
 router.get("/all", async function (req, res) {
   try{

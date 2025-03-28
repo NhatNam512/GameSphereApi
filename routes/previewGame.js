@@ -2,6 +2,27 @@ var express = require('express');
 var router = express.Router();
 const previewModel = require('../models/games/previewGameModel');
 const {getSocketIO} = require("../socket/socket");
+const Game = require('../models/games/gameModel')
+const mongoose = require("mongoose");
+
+const getAverageRating = async(gameId) => {
+    const result = await previewModel.aggregate([
+      { $match: { gameId: new mongoose.Types.ObjectId(gameId)} },
+      {
+        $group: {
+          _id: "$gameId",
+          averageRating: { $avg: "$rating" }
+        }
+      }
+    ]);
+   
+    return result.length > 0 ? parseFloat(result[0].averageRating.toFixed(1)) : 0;
+  }
+  
+  const updateGameRating = async (gameId) => {
+    const average = await getAverageRating(gameId);
+    await Game.findByIdAndUpdate(gameId, { averageRating: average });
+  };
 
 router.post("/post", async (req, res) => {
     try{
@@ -10,6 +31,7 @@ router.post("/post", async (req, res) => {
             userId, gameId, comment, rating, image
         });
         await newPost.save();
+        await updateGameRating(gameId);
         res.status(200).json({ status: true, message: "Đăng bài thành công", data: newPost});
     }catch(e){
         res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
