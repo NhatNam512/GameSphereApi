@@ -15,7 +15,7 @@ const users = new schema({
     longitude: { type: Number },
     latitude: { type: Number },
     ticketsHave: {type: [oid], ref: "tickets"},
-    phoneNumber: {type: Number},
+    phoneNumber: {type: String},
     address: {type: String},
 });
 module.exports = mongoose.model.users || mongoose.model("users", users);
