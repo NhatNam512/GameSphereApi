@@ -32,6 +32,10 @@ router.post("/post", async (req, res) => {
         });
         await newPost.save();
         await updateGameRating(gameId);
+
+        const io = getSocketIO(); // Lấy đối tượng Socket.IO
+        io.emit("newPost", { message: "Có bài post mới!", post: newPost });
+
         res.status(200).json({ status: true, message: "Đăng bài thành công", data: newPost});
     }catch(e){
         res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
