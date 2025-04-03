@@ -21,7 +21,7 @@ router.post("/add", async (req, res) => {
 
   router.get("/getCart/:userId", async (req, res) => {
     try {
-      const cart = await cartModel.find({ userId: req.params.userId }).populate("items.productId");
+      const cart = await cartModel.find({ userId: req.params.userId }).populate("products.productId");
       res.status(200).json({
         status: true,
         message: "Lấy giỏ hàng thành công",
