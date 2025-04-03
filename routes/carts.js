@@ -10,7 +10,7 @@ router.post("/add", async (req, res) => {
     try {
       let cart = await cartModel.findOne({ userId });
       if (!cart) {
-        cart = new cartModel({ userId, items: [], status: 1 });
+        cart = new cartModel({ userId, items: [], status: status });
       }
       for (const { productId, quantity } of products) {
         const product = await plantModel.findById(productId);
