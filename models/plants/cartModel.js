@@ -11,6 +11,7 @@ const carts = new schema({
         price: { type: Number, required: true }, 
       },
     ],
+    status: {type: Number, default: 0},
     updatedAt: { type: Date, default: Date.now },
   });
 module.exports = mongoose.models.carts || mongoose.model("carts", carts);

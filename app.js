@@ -13,12 +13,14 @@ require("./models/events/categoryModel");
 require("./models/events/eventModel");
 require("./models/events/orderModel");
 require("./models/events/ticketModel");
+require("./models/events/previewEventModel");
 require("./models/plants/plantModel");
 require("./models/plants/plantCategoryModel");
 require("./models/games/gameModel");
 require("./models/games/previewGameModel");
 require("./models/games/categoriesGameModel");
-require("./models/games/previewGameModel")
+require("./models/games/previewGameModel");
+require("./models/plants/cartModel");
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -34,6 +36,8 @@ var gamesRouter = require('./routes/games');
 var recommendRouter = require("./routes/recommendation");
 var categoriesGamesRouter = require('./routes/categoriesGames');
 var previewGameRouter = require('./routes/previewGame');
+var previewEventRouter = require('./routes/previewEvent');
+var cartRouter = require('./routes/carts');
 
 var app = express();
 var http = require('http');
@@ -72,6 +76,8 @@ app.use("/emails", emailRouter);
 app.use("/recommend", recommendRouter);
 app.use("/categories_games", categoriesGamesRouter);
 app.use("/previewGame", previewGameRouter);
+app.use("/previewEvent", previewEventRouter);
+app.use('/carts', cartRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));

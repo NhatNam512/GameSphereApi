@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 const plantModel = require('../models/plants/plantModel');
 const categoryModel = require('../models/plants/plantCategoryModel');
+const { default: mongoose } = require('mongoose');
 
 router.get('/all', async function (req, res) {
     try{
@@ -72,5 +73,22 @@ router.get("/search", async function (req, res) {
       res.status(400).json({ status: false, message: "Error: " + e });
     }
   });
+  router.get('/getPlant', async function (req, res) {
+    try {
+        const { type } = req.query;
+        const plants = await plantModel.find({type: type}).populate('type');
+        if (plants.length > 0) {
+            res.status(200).json({
+                status: true,
+                message: 'Lấy sản phẩm thành công',
+                plants
+            });
+        } else {
+            res.status(404).json({ status: false, message: "Không thấy sản phẩm" });
+        }
+    } catch (e) {
+        res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại: " + e.message });
+    }
+});
 
 module.exports = router;
