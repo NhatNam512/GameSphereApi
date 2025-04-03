@@ -4,7 +4,7 @@ const oid = schema.ObjectId;
 
 const carts = new schema({
     userId: { type: oid, ref: "users", required: true },
-    items: [
+    products: [
       {
         productId: { type: oid, ref: "plants", required: true },
         quantity: { type: Number, required: true, min: 1 },

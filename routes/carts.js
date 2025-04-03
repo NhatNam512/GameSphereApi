@@ -12,8 +12,7 @@ router.post("/add", async (req, res) => {
       await cartModel.create(newOrder);
       res.status(200).json({
         status: true,
-        message: "Thêm giỏ hàng thành công",
-        data: cart
+        message: "Thêm giỏ hàng thành công"
       });
     } catch (error) {
       res.status(500).json({ message: error.message });
