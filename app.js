@@ -38,6 +38,7 @@ var categoriesGamesRouter = require('./routes/categoriesGames');
 var previewGameRouter = require('./routes/previewGame');
 var previewEventRouter = require('./routes/previewEvent');
 var cartRouter = require('./routes/carts');
+var notificationRouter = require('./routes/notification');
 
 var app = express();
 var http = require('http');
@@ -78,6 +79,7 @@ app.use("/categories_games", categoriesGamesRouter);
 app.use("/previewGame", previewGameRouter);
 app.use("/previewEvent", previewEventRouter);
 app.use('/carts', cartRouter);
+app.use('/notificatons', notificationRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
