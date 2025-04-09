@@ -4,9 +4,9 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
+var { Server } = require('socket.io');
 
 const mongoose = require('mongoose');
-const {initializeSocket } = require("./socket/socket");
 
 require("./models/userModel");
 require("./models/events/categoryModel");
@@ -43,8 +43,10 @@ var notificationRouter = require('./routes/notification');
 var app = express();
 var http = require('http');
 var server = http.createServer(app);
+var io = new Server(server,{
+  path: '/socket/'
+});
 
-const io = initializeSocket(server);
 io.on("connection", (socket) => {
     console.log("Client đã kết nối:", socket.id);
 });
