@@ -64,10 +64,6 @@ wss.on('connection', (ws) => {
   ws.send('Welcome to the WebSocket server!');
 });
 
-server.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
-
 var io = new Server(server);
 
 io.on("connection", (socket) => {
@@ -120,6 +116,11 @@ app.use(function(err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
   res.render('error');
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
 
 module.exports = app;
