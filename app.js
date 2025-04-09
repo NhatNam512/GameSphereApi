@@ -45,29 +45,28 @@ var app = express();
 var http = require('http');
 var server = http.createServer(app);
 
-const wss = new WebSocket.Server({ server });
-wss.on('connection', (ws) => {
-  console.log('Client connected');
-  
-  ws.on('message', (message) => {
-    console.log(`Received message: ${message}`);
-    
-    // Phản hồi lại client
-    ws.send(`Server received: ${message}`);
-  });
-  
-  ws.on('close', () => {
-    console.log('Client disconnected');
-  });
-  
-  // Gửi tin nhắn chào mừng
-  ws.send('Welcome to the WebSocket server!');
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Đảm bảo client có thể kết nối
+    methods: ["GET", "POST"]
+  }
 });
 
-var io = new Server(server);
-
 io.on("connection", (socket) => {
-    console.log("Client đã kết nối:", socket.id);
+  console.log("Client connected: " + socket.id);
+
+  // Gửi tin nhắn mỗi 5s
+  const interval = setInterval(() => {
+    socket.emit("server-message", {
+      message: "Hello from server",
+      time: new Date().toISOString()
+    });
+  }, 5000);
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected: " + socket.id);
+    clearInterval(interval);
+  });
 });
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -116,6 +115,11 @@ app.use(function(err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
   res.render('error');
+});
+
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
