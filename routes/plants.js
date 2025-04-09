@@ -2,7 +2,6 @@ var express = require('express');
 var router = express.Router();
 const plantModel = require('../models/plants/plantModel');
 const categoryModel = require('../models/plants/plantCategoryModel');
-const { default: mongoose } = require('mongoose');
 
 router.get('/all', async function (req, res) {
     try{
@@ -18,6 +17,23 @@ router.get('/all', async function (req, res) {
         res.status(400).json({ status: false, message: "Lấy sản phẩm thất bại: " + e.message });
     }
 });
+
+router.get("/home", async function (req, res) {
+  try{
+  const plants = await plantModel.find()
+  .populate('type')
+  .select("_id name type price images");
+
+  res.status(200).json({
+    status: true,
+    message: "Lấy danh sách cây thành công",
+    data: plants 
+  });
+  }catch(e){
+    res.status(400).json({ status: false, message: "Error" + e});
+  }
+});
+
 router.get('/detail/:id', async function (req, res) {
     try{
       const { id }= req.params;
