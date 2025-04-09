@@ -64,9 +64,18 @@ wss.on('connection', (ws) => {
   ws.send('Welcome to the WebSocket server!');
 });
 
-var io = new Server(server,{
-  path: '/socket/'
+server.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
 });
+
+function normalizePort(val) {
+  const port = parseInt(val, 10);
+  if (isNaN(port)) return val;
+  if (port >= 0) return port;
+  return false;
+}
+
+var io = new Server(server);
 
 io.on("connection", (socket) => {
     console.log("Client đã kết nối:", socket.id);
