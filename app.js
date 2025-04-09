@@ -5,6 +5,7 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
 var { Server } = require('socket.io');
+const WebSocket = require('ws');
 
 const mongoose = require('mongoose');
 
@@ -43,6 +44,26 @@ var notificationRouter = require('./routes/notification');
 var app = express();
 var http = require('http');
 var server = http.createServer(app);
+
+const wss = new WebSocket.Server({ server });
+wss.on('connection', (ws) => {
+  console.log('Client connected');
+  
+  ws.on('message', (message) => {
+    console.log(`Received message: ${message}`);
+    
+    // Phản hồi lại client
+    ws.send(`Server received: ${message}`);
+  });
+  
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+  
+  // Gửi tin nhắn chào mừng
+  ws.send('Welcome to the WebSocket server!');
+});
+
 var io = new Server(server,{
   path: '/socket/'
 });
