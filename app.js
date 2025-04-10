@@ -122,4 +122,9 @@ server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
+setInterval(() => {
+  socket.emit("ping");
+}, 1000 * 60 * 5); // 5 phút
+
+
 module.exports = app;
