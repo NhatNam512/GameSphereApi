@@ -4,8 +4,6 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
-var { Server } = require('socket.io');
-const WebSocket = require('ws');
 
 const mongoose = require('mongoose');
 
@@ -45,33 +43,6 @@ var app = express();
 var http = require('http');
 var server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: "*", // Đảm bảo client có thể kết nối
-    methods: ["GET", "POST"]
-  }
-});
-
-io.on("connection", (socket) => {
-  console.log("Client connected: " + socket.id);
-
-  // Gửi tin nhắn mỗi 5s
-  const interval = setInterval(() => {
-    socket.emit("server-message", {
-      message: "Hello from server",
-      time: new Date().toISOString()
-    });
-  }, 5000);
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected: " + socket.id);
-    clearInterval(interval);
-  });
-  
-setInterval(() => {
-  socket.emit("ping");
-}, 1000 * 60 * 5); // 5 phút
-});
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');

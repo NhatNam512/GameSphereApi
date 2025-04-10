@@ -4,23 +4,38 @@ let io;
 
 function initializeSocket(server) {
     io = new Server(server, {
-        cors: { origin: "*" }
+        cors: { 
+            origin: "*",
+            methods: ["GET", "POST"],
+            credentials: true
+        },
+        transports: ["websocket", "polling"], // Hỗ trợ cả WebSocket và Polling
+        
     });
 
     io.on("connection", (socket) => {
         console.log("Client kết nối:", socket.id);
-        socket.on("message", (data) => {
-            console.log(`Tin nhắn từ ${socket.id}:`, data);
-            
-            // Gửi tin nhắn cho tất cả clients khác
-            socket.broadcast.emit("message", data);
-            
-            // Hoặc có thể xử lý và phản hồi cho client gửi
-            // socket.emit("message", `Server đã nhận: ${data}`);
+
+        // Thêm nhiều log để debug
+        socket.on("connect_error", (error) => {
+            console.error("Socket kết nối lỗi:", error);
         });
-        socket.on("disconnect", () => {
-            console.log("Client ngắt kết nối:", socket.id);
+
+        socket.on("disconnect", (reason) => {
+            console.log("Client ngắt kết nối:", socket.id, "Lý do:", reason);
         });
+
+        // Ví dụ về việc bắt và log các sự kiện khác
+        socket.on("error", (error) => {
+            console.error("Lỗi socket:", error);
+        });
+    });
+
+    // Thêm log toàn cục cho kết nối
+    io.engine.on("connection_error", (err) => {
+        console.log("Lỗi kết nối socket toàn cục:", err.message);
+        console.log("Mã lỗi:", err.code);
+        console.log("Chi tiết lỗi:", err);
     });
 
     return io;
@@ -33,28 +48,4 @@ function getSocketIO() {
     return io;
 }
 
-// Hàm gửi tin nhắn tới tất cả clients
-function broadcastMessage(event, data) {
-    if (!io) {
-        throw new Error("Socket.IO chưa được khởi tạo!");
-    }
-    io.emit(event, data);
-}
-
-// Hàm gửi tin nhắn tới một client cụ thể
-function sendToClient(socketId, event, data) {
-    if (!io) {
-        throw new Error("Socket.IO chưa được khởi tạo!");
-    }
-    const socket = io.sockets.sockets.get(socketId);
-    if (socket) {
-        socket.emit(event, data);
-    }
-}
-
-module.exports = { 
-    initializeSocket, 
-    getSocketIO,
-    broadcastMessage,
-    sendToClient
-};
+module.exports = { initializeSocket, getSocketIO };
