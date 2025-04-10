@@ -117,11 +117,6 @@ app.use(function(err, req, res, next) {
   res.render('error');
 });
 
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
 setInterval(() => {
   socket.emit("ping");
 }, 1000 * 60 * 5); // 5 phút
