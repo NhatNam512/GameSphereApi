@@ -6,6 +6,7 @@ const eventModel = require('../models/events/eventModel');
 const redis = require('../redis/redisClient');
 const natural = require("natural");
 const {updateEventVector} = require("../service/contentBased");
+const { default: mongoose } = require('mongoose');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -179,31 +180,40 @@ router.get("/revenue", async function (req, res) {
   }
 });
 
-// const redisClient = new redis();
-// async function saveEventToStream(event) {
-//   await redisClient.xadd("event_stream", "*", "title", event.name, "category", event.categories)
-// }
-// router.post("/events", async (req, res) => {
-//   try {
-//     const event = await Event.create(req.body);
-//     await saveEventToStream(event); // Lưu vào Redis Stream
-//     pub.publish("event_updates", JSON.stringify(event));
-//     res.status(201).json(event);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// });
-// async function getRecentEvents(limit = 5) {
-//   const events = await redisClient.xrevrange("event_stream", "+", "-", "COUNT", limit);
-//   return events.map(([id, data]) => ({
-//     id,
-//     title: data[1],
-//     category: data[3],
-//   }));
-// }
+router.post("/sort", async function (req, res) {
+  try {
+    const { categories, ticketPrice, timeStart } = req.body;
+    const filter = {};
 
-// router.get("/suggested-events", async (req, res) => {
-//   const recentEvents = await getRecentEvents();
-//   res.json(recentEvents);
-// });
+    // Thêm điều kiện lọc cho categories nếu có
+    if (categories) {
+      filter.categories = categories;
+    }
+
+    // Thêm điều kiện lọc cho ticketPrice nếu có
+    if (ticketPrice) {
+      filter.ticketPrice = { $lte: ticketPrice }; // Lọc các sự kiện có giá vé nhỏ hơn hoặc bằng ticketPrice
+    }
+
+    // Thêm điều kiện lọc cho timeStart nếu có
+    if (timeStart) {
+      filter.timeStart = { $gte: new Date(timeStart) }; // Lọc các sự kiện bắt đầu từ timeStart trở đi
+    }
+
+    const events = await eventModel.find(filter);
+
+    if (events.length > 0) {
+      res.status(200).json({
+        status: true,
+        message: "Lọc sự kiện thành công",
+        data: events
+      });
+    } else {
+      res.status(404).json({ status: false, message: "Không tìm thấy sự kiện" });
+    }
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error: " + e.message });
+  }
+});
+
 module.exports = router;

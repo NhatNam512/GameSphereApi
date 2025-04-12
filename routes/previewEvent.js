@@ -33,8 +33,10 @@ router.post("/post", async (req, res) => {
         await newPost.save();
         await updateEventRating(eventId);
 
+        const populatedPost = await previewModel.findById(newPost._id).populate("userId", "username email picUrl");
+
         const io = getSocketIO(); // Lấy đối tượng Socket.IO
-        io.emit("newPost", { message: "Có bài post mới!", post: newPost });
+        io.emit("newPostEvent", { message: "Có bài post mới!", post: populatedPost });
 
         res.status(200).json({ status: true, message: "Đăng bài thành công", data: newPost});
     }catch(e){
