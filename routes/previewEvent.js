@@ -26,9 +26,9 @@ const getAverageRating = async(eventId) => {
 
 router.post("/post", async (req, res) => {
     try{
-        const {userId, eventId, comment, rating, image} = req.body;
+        const {userId, eventId, comment, rating, image, status} = req.body;
         const newPost = new previewModel({
-            userId, eventId, comment, rating, image
+            userId, eventId, comment, rating, image, status
         });
         await newPost.save();
         await updateEventRating(eventId);
