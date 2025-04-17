@@ -23,4 +23,9 @@ const events = new schema({
     userId: {type: String, ref: "users"},
 });
 
+events.index({ timeStart: 1 });
+events.index({ categories: 1 });
+events.index({ userId: 1 });
+events.index({ status: 1 });
+
 module.exports = mongoose.models.events || mongoose.model("events", events);

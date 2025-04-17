@@ -4,6 +4,7 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
+const compression = require('compression');
 
 const mongoose = require('mongoose');
 
@@ -13,13 +14,10 @@ require("./models/events/eventModel");
 require("./models/events/orderModel");
 require("./models/events/ticketModel");
 require("./models/events/previewEventModel");
-require("./models/plants/plantModel");
-require("./models/plants/plantCategoryModel");
 require("./models/games/gameModel");
 require("./models/games/previewGameModel");
 require("./models/games/categoriesGameModel");
 require("./models/games/previewGameModel");
-require("./models/plants/cartModel");
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -27,8 +25,6 @@ var categoriesRouter = require('./routes/categories');
 var eventsRouter = require('./routes/events');
 var ordersRouter = require('./routes/orders');
 var ticketsRouter = require('./routes/tickets');
-var plantsRounter = require('./routes/plants');
-var plantCategoriesRouter = require('./routes/plantCategories');
 var paymentRouter = require("./routes/payments");
 var emailRouter = require("./routes/emails");
 var gamesRouter = require('./routes/games');
@@ -36,7 +32,6 @@ var recommendRouter = require("./routes/recommendation");
 var categoriesGamesRouter = require('./routes/categoriesGames');
 var previewGameRouter = require('./routes/previewGame');
 var previewEventRouter = require('./routes/previewEvent');
-var cartRouter = require('./routes/carts');
 
 var app = express();
 var http = require('http');
@@ -46,6 +41,7 @@ var server = http.createServer(app);
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');
 
+app.use(compression());
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -64,21 +60,16 @@ app.use('/categories', categoriesRouter);
 app.use('/events', eventsRouter);
 app.use('/orders', ordersRouter);
 app.use('/tickets', ticketsRouter);
-app.use('/plants', plantsRounter);
-app.use('/plantCategories', plantCategoriesRouter);
 app.use("/payments", paymentRouter);
 app.use("/emails", emailRouter);
 app.use("/recommend", recommendRouter);
 app.use("/categories_games", categoriesGamesRouter);
 app.use("/previewGame", previewGameRouter);
 app.use("/previewEvent", previewEventRouter);
-app.use('/carts', cartRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
 });
-
-
 // error handler
 app.use(function(err, req, res, next) {
   // set locals, only providing error in development

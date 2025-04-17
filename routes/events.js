@@ -43,28 +43,43 @@ router.get("/all", async function (req, res) {
 router.get("/home", async function (req, res) {
   try {
     const cacheKey = "events_home";
+
+    console.time("🔁 Redis GET");
     const cachedData = await redis.get(cacheKey);
+    console.timeEnd("🔁 Redis GET");
 
     if (cachedData) {
-      console.log("📦 Lấy dữ liệu từ Redis cache");
-      return res.status(200).json({
+      console.time("📦 JSON.parse");
+      const parsedData = JSON.parse(cachedData);
+      console.timeEnd("📦 JSON.parse");
+
+      console.time("🚀 res.json");
+      res.status(200).json({
         status: true,
         message: "Lấy danh sách sự kiện thành công (từ Redis cache)",
-        data: JSON.parse(cachedData)
+        data: parsedData
       });
+      console.timeEnd("🚀 res.json");
+
+      return;
     }
 
+    console.time("🗃️ DB Query");
     const events = await eventModel.find()
       .select("_id name timeStart timeEnd avatar banner categories")
       .lean();
+    console.timeEnd("🗃️ DB Query");
 
-    await redis.set(cacheKey, JSON.stringify(events), 'EX', 300); // Cache 5 phút
-    
+    console.time("📤 Redis SET");
+    await redis.set(cacheKey, JSON.stringify(events), 'EX', 300);
+    console.timeEnd("📤 Redis SET");
+
     res.status(200).json({
       status: true,
       message: "Lấy danh sách sự kiện thành công",
       data: events
     });
+
   } catch (e) {
     console.error("❌ Error in /home route:", e);
     res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
