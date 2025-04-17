@@ -43,6 +43,38 @@ router.get("/all", async function (req, res) {
   }
 });
 
+router.get("/home", async function (req, res) {
+  try {
+    const cacheKey = "events_home";
+    const cachedData = await redis.get(cacheKey);
+
+    if (cachedData) {
+      console.log("📦 Lấy dữ liệu từ Redis cache");
+      return res.status(200).json({
+        status: true,
+        message: "Lấy danh sách sự kiện thành công (từ Redis cache)",
+        data: JSON.parse(cachedData)
+      });
+    }
+
+    const events = await eventModel.find()
+      .select("_id name timeStart timeEnd avatar banner categories")
+      .lean();;
+
+    await redis.set(cacheKey, JSON.stringify(events), 'EX', 300); // Cache 5 phút
+
+    res.status(200).json({
+      status: true,
+      message: "Lấy danh sách sự kiện thành công",
+      data: events
+    });
+  } catch (e) {
+    console.error("❌ Error in /home route:", e);
+    res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
+  }
+});
+
+
 router.get("/detail/:id", async function (req, res) {
   try {
     const { id } = req.params;
