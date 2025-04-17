@@ -4,9 +4,6 @@ const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
 const eventModel = require('../models/events/eventModel');
 const redis = require('../redis/redisClient');
-const natural = require("natural");
-const {updateEventVector} = require("../service/contentBased");
-const { default: mongoose } = require('mongoose');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -21,7 +18,7 @@ sub.on("message", (channel, message) => {
   }
 });
 
-router.get("/all", async function (req, res) {
+router.get("/all", async function (res) {
   try {
     const cacheKey = "events";
     const cachedData = await redis.get(cacheKey);
@@ -43,7 +40,7 @@ router.get("/all", async function (req, res) {
   }
 });
 
-router.get("/home", async function (req, res) {
+router.get("/home", async function (res) {
   try {
     const cacheKey = "events_home";
     const cachedData = await redis.get(cacheKey);
@@ -77,6 +74,9 @@ router.get("/home", async function (req, res) {
 
 router.get("/detail/:id", async function (req, res) {
   try {
+    const cacheKey = "events_detail";
+    const cachedData = await redis.get(cacheKey);
+
     const { id } = req.params;
     var detail = await eventModel.findById(id);
 

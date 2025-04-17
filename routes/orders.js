@@ -5,7 +5,6 @@ const config = require("../until/tokenConfig");
 const orderModel = require('../models/events/orderModel');
 const Ticket = require('../models/events/ticketModel');
 const Event = require('../models/events/eventModel');
-const User = require('../models/userModel');
 const QRCode = require('qrcode');
 
 router.get("/getOrders", async function (req, res) {

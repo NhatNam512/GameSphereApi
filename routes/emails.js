@@ -1,20 +1,9 @@
 require("dotenv").config();
 const express = require("express");
 var router = express.Router();
-const nodemailer = require("nodemailer");
 const cryto = require("crypto");
 const sgMail = require("@sendgrid/mail");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: true,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-});
 
 const otpStorage = new Map();
 

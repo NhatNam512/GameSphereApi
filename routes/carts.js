@@ -3,7 +3,6 @@ var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
 const cartModel = require('../models/plants/cartModel');
-const plantModel = require('../models/plants/plantModel');
 
 router.post("/add", async (req, res) => {
     try {

@@ -3,7 +3,6 @@ var router = express.Router();
 const JWT = require('jsonwebtoken');
 const config = require("../until/tokenConfig");
 const gameModel = require('../models/games/gameModel');
-const PreviewGame = require('../models/games/previewGameModel');
 
 router.get("/all", async function (req, res) {
   try{
@@ -59,11 +58,6 @@ router.post("/add", async (req, res) => {
     res.status(500).json({ status: false, message: "Lỗi server: " + error.message });
   }
 });
-
-/** 
- * @route   PUT /games/update/:id
- * @desc    Cập nhật game
- */
 router.put("/update/:id", async (req, res) => {
   try {
     const { id } = req.params;

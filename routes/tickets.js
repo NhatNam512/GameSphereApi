@@ -5,7 +5,6 @@ const config = require("../until/tokenConfig");
 const Ticket = require('../models/events/ticketModel');
 const Event = require('../models/events/eventModel')
 const User = require('../models/userModel');
-const mongoose = require('mongoose');
 
 router.get("/all", async function (req, res) {
     try{
