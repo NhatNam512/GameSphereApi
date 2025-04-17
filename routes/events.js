@@ -18,7 +18,7 @@ sub.on("message", (channel, message) => {
   }
 });
 
-router.get("/all", async function (res) {
+router.get("/all", async function (req, res) {
   try {
     const cacheKey = "events";
     const cachedData = await redis.get(cacheKey);
@@ -40,7 +40,7 @@ router.get("/all", async function (res) {
   }
 });
 
-router.get("/home", async function (res) {
+router.get("/home", async function (req, res) {
   try {
     const cacheKey = "events_home";
     const cachedData = await redis.get(cacheKey);
@@ -56,10 +56,10 @@ router.get("/home", async function (res) {
 
     const events = await eventModel.find()
       .select("_id name timeStart timeEnd avatar banner categories")
-      .lean();;
+      .lean();
 
     await redis.set(cacheKey, JSON.stringify(events), 'EX', 300); // Cache 5 phút
-
+    
     res.status(200).json({
       status: true,
       message: "Lấy danh sách sự kiện thành công",
