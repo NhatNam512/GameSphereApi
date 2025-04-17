@@ -55,9 +55,7 @@ router.get("/home", async function (req, res) {
 
       console.time("🚀 res.json");
       res.status(200).json({
-        status: true,
-        message: "Lấy danh sách sự kiện thành công (từ Redis cache)",
-        data: parsedData
+        parsedData
       });
       console.timeEnd("🚀 res.json");
 
@@ -89,11 +87,18 @@ router.get("/home", async function (req, res) {
 
 router.get("/detail/:id", async function (req, res) {
   try {
-    const cacheKey = "events_detail";
-    const cachedData = await redis.get(cacheKey);
-
     const { id } = req.params;
-    var detail = await eventModel.findById(id);
+    const cacheKey = `events_detail_${id}`;
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log("📦 Lấy dữ liệu từ Redis cache");
+      return res.status(200).json({
+        status: true,
+        message: "Lấy chi tiết sự kiện thành công (từ Redis cache)",
+        data: JSON.parse(cachedData)
+      });
+    }
+    const detail = await eventModel.findById(id);
 
     if (detail) {
       res.status(200).json({
