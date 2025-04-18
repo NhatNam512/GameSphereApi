@@ -177,5 +177,38 @@ router.get("/:id", async function (req, res) {
   }
 })
 
+router.put("/fcmToken", async function (req, res) {
+  try {
+    const {id, fcmToken} = req.body;
+    const itemUpdate = await userModel.findById(id);
+
+    if(itemUpdate){
+      // Kiểm tra xem token đã tồn tại chưa
+      if (!itemUpdate.fcmTokens.includes(fcmToken)) {
+        itemUpdate.fcmTokens.push(fcmToken);
+        await itemUpdate.save();
+        res.status(200).json({ 
+          status: true, 
+          message: "Thêm FCM token thành công" 
+        });
+      } else {
+        res.status(200).json({ 
+          status: true, 
+          message: "Token đã tồn tại" 
+        });
+      }
+    } else {
+      res.status(404).json({ 
+        status: false, 
+        message: "Không tìm thấy người dùng" 
+      });
+    }
+  } catch(e) {
+    res.status(400).json({ 
+      status: false, 
+      message: "Lỗi: " + e 
+    });
+  }
+})
 module.exports = router;
 
