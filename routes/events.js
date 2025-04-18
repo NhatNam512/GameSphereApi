@@ -101,7 +101,8 @@ router.get("/detail/:id", async function (req, res) {
     const detail = await eventModel.findById(id);
 
     if (detail) {
-      res.status(200).json({
+      await redis.set(cacheKey, JSON.stringify(detail), 'EX', 300);
+      return res.status(200).json({
         status: true,
         message: "Lấy chi tiết sự kiện thành công",
         data: detail
