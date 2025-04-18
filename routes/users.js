@@ -38,6 +38,7 @@ router.post("/login", async function (req, res) {
           id: checkUser._id,
           email: checkUser.email,
           token: token,
+          fcmTokens: checkUser.fcmTokens
         }
       });
     }

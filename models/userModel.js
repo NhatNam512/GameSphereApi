@@ -17,5 +17,6 @@ const users = new schema({
     ticketsHave: {type: [oid], ref: "tickets"},
     phoneNumber: {type: String},
     address: {type: String},
+    fcmTokens: {type: []}
 });
 module.exports = mongoose.model.users || mongoose.model("users", users);
