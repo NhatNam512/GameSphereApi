@@ -4,13 +4,13 @@ let io;
 
 function initializeSocket(server) {
     io = new Server(server, {
-        cors: { 
+        cors: {
             origin: "*",
             methods: ["GET", "POST"],
             credentials: true
         },
         transports: ["websocket", "polling"], // Hỗ trợ cả WebSocket và Polling
-        
+
     });
 
     io.on("connection", (socket) => {
@@ -19,6 +19,12 @@ function initializeSocket(server) {
         // Thêm nhiều log để debug
         socket.on("connect_error", (error) => {
             console.error("Socket kết nối lỗi:", error);
+        });
+
+        // ✅ Nhận userId từ phía client và join vào room
+        socket.on("joinRoom", (userId) => {
+            socket.join(userId); // Mỗi user là một room riêng
+            console.log(`🔗 User ${userId} đã join room riêng.`);
         });
 
         socket.on("disconnect", (reason) => {

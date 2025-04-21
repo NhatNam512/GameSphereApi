@@ -3,7 +3,9 @@ var router = express.Router();
 const userModel = require("../../models/userModel");
 const JWT = require('jsonwebtoken');
 const config = require("../../utils/tokenConfig");
-const bcrypt = require('bcrypt')
+const bcrypt = require('bcrypt');
+const { sendPushNotification } = require('../../controllers/events/sendNotification');
+const { saveNotifications } = require('../../controllers/events/saveNotification');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -209,6 +211,26 @@ router.put("/fcmToken", async function (req, res) {
       message: "Lỗi: " + e 
     });
   }
-})
+});
+
+router.post('/send-notification', async function(req, res) {
+  try {
+    const { fcmToken, title, body, data } = req.body;
+
+    if (!fcmToken || !title || !body) {
+      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc: fcmToken, title, body' });
+    }
+
+    await sendPushNotification(fcmToken, title, body, data || {});
+    await saveNotifications(fcmToken, title, body, data)
+    res.status(200).json({ message: '✅ Notification sent' });
+  } catch (e) {
+    console.error('❌ Error sending notification:', e);
+    const errorMessage = e?.response?.data?.error || e.message || 'Unknown error';
+    res.status(500).json({ message: '❌ Lỗi khi gửi thông báo', error: errorMessage });
+  }
+});
+
+
 module.exports = router;
 
