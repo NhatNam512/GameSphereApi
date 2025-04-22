@@ -17,9 +17,9 @@ exports.createInteraction = async (req, res) => {
         const interaction = new Interaction({ userId, eventId, type, value });
         await interaction.save();
 
-        res.status(201).json({ message: 'Interaction saved', interaction });
+        res.status(200).json({ message: 'Interaction saved', interaction });
 
     } catch (error) {
-        res.status(500).json({ message: 'Error saving interaction', error: err.message });
+        res.status(500).json({ message: 'Error saving interaction', error: error.message });
     }
 }
