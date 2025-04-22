@@ -9,6 +9,7 @@ const previewRouter = require('./events/previewEvent');
 const paymentRouter = require('./events/payments');
 const recommendRouter = require('./events/recommendation');
 const usersRouter = require('./events/users');
+const interactionRouter = require('./events/interactions');
 
 var gamesRouter = require('./games/games');
 var categoriesGamesRouter = require('./games/categoriesGames');
@@ -25,5 +26,6 @@ router.use('/users', usersRouter);
 router.use('/games', gamesRouter);
 router.use("/categories_games", categoriesGamesRouter);
 router.use("/previewGame", previewGameRouter);
+router.use("/interactions", interactionRouter);
 
 module.exports = router;
