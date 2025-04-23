@@ -33,4 +33,14 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
+// redisClient.js
+redis.xAdd = (stream, id, data) => {
+  const args = [stream, id];
+  for (const [key, value] of Object.entries(data)) {
+    args.push(key, value.toString());
+  }
+  return redis.xadd(...args);
+};
+
+
 module.exports = redis;

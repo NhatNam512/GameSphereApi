@@ -6,6 +6,8 @@ const eventModel = require('../../models/events/eventModel');
 const redis = require('../../redis/redisClient');
 const validate = require('../../middlewares/validation');
 const eventSchema = require('../../validations/eventValidation');
+const authenticate = require('../../middlewares/auth');
+const { getRecommendedEvents } = require('../../controllers/events/recommendedEvents');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -66,7 +68,7 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find()
-      .select("_id name timeStart timeEnd avatar banner categories")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude")
       .lean();
     console.timeEnd("🗃️ DB Query");
 
@@ -292,5 +294,7 @@ router.post("/sort", async function (req, res) {
     res.status(400).json({ status: false, message: "Error: " + e.message });
   }
 });
+
+router.get("/for-you", authenticate, getRecommendedEvents);
 
 module.exports = router;

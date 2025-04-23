@@ -35,16 +35,19 @@ router.post("/login", async function (req, res) {
       return res.status(400).json({ status: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
     else {
-      var token = JWT.sign({ email: email }, config.SECRETKEY, { expiresIn: "1h" });
-      const refreshToken = JWT.sign({ id: email._id }, config.SECRETKEY, { expiresIn: '1h' })
+      const tokenPayload = { id: checkUser._id, email: checkUser.email };
+      var token = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1h" });
+      const refreshToken = JWT.sign({ id: email._id }, config.SECRETKEY, { expiresIn: '7d' })
+      
       res.status(200).json({
         status: 200,
         message: "Đăng nhập thành công",
         data: {
           id: checkUser._id,
           email: checkUser.email,
-          token: token,
-          fcmTokens: checkUser.fcmTokens
+          token,
+          refreshToken,
+          fcmTokens: checkUser.fcmTokens || []
         }
       });
     }
