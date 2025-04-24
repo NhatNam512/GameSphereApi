@@ -10,8 +10,8 @@ const users = new schema({
     picUrl: { type: String },
     createAt: { type: Date, default: Date.now() },
     updateAt: { type: Date, default: Date.now() },
+    tags: { type: [String] },
     role: { type: Number },
-    notification: { type: [] },
     longitude: { type: Number },
     latitude: { type: Number },
     location: {             // Geo location
@@ -21,6 +21,7 @@ const users = new schema({
     ticketsHave: { type: [oid], ref: "tickets" },
     phoneNumber: { type: String },
     address: { type: String },
-    fcmTokens: { type: [] }
+    fcmTokens: { type: [] },
+    refreshToken: { type: String },
 });
 module.exports = mongoose.model.users || mongoose.model("users", users);

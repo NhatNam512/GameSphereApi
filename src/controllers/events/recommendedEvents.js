@@ -1,27 +1,34 @@
 const Event = require('../../models/events/eventModel');
 const Interaction = require('../../models/events/interactionModel');
 const User = require('../../models/userModel');
+const redis = require('../../redis/redisClient');
 
 exports.getRecommendedEvents = async (req, res) => {
   try {
-    const userId = req.user.id; // Lấy từ middleware auth
+    const userId = req.user.id;
     const limit = parseInt(req.query.limit) || 10;
+    const cacheKey = `recommend:${userId}`;
 
+    // Kiểm tra cache
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
+    // Lấy thông tin user
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const interactions = await Interaction.find({ userId });
 
-    // 👉 Nếu user mới
+    // 👉 COLD START
     if (interactions.length === 0) {
       let query = {};
 
-      // Ưu tiên theo tag
       if (user.tags?.length) {
         query.tags = { $in: user.tags };
       }
 
-      // Ưu tiên theo vị trí nếu có
       if (user.location?.coordinates?.length) {
         query.location = {
           $near: {
@@ -35,10 +42,13 @@ exports.getRecommendedEvents = async (req, res) => {
       }
 
       const events = await Event.find(query).limit(limit);
-      return res.json({ from: 'cold-start', events });
+
+      const response = { from: 'cold-start', events };
+      await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5); // Cache 5 phút
+      return res.json(response);
     }
 
-    // Nếu user có tương tác
+    // 👉 CÓ LỊCH SỬ TƯƠNG TÁC
     const topInteractions = await Interaction.aggregate([
       { $match: { userId } },
       { $group: { _id: '$eventId', total: { $sum: '$value' } } },
@@ -49,20 +59,20 @@ exports.getRecommendedEvents = async (req, res) => {
     const eventIds = topInteractions.map(i => i._id);
     const topEvents = await Event.find({ _id: { $in: eventIds } });
 
-    // Gom tags từ topEvents
     const tagSet = new Set();
     topEvents.forEach(ev => ev.tags?.forEach(tag => tagSet.add(tag)));
 
-    // Tránh gợi ý lại event đã xem
     const seenEventIds = interactions.map(i => i.eventId);
 
-    // Gợi ý theo tag trùng
     const recommended = await Event.find({
       tags: { $in: Array.from(tagSet) },
       _id: { $nin: seenEventIds }
     }).limit(limit);
 
-    return res.json({ from: 'personalized', events: recommended });
+    const response = { from: 'personalized', events: recommended };
+    await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);
+    return res.json(response);
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

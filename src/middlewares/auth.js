@@ -24,7 +24,9 @@ const authenticate = async(req, res, next) => {
         // Lưu thông tin user vào request để các route sau dùng
         req.user = {
           id: user._id,
-          email: user.email
+          email: user.email,
+          tags: user.tags, // Có thể thêm nếu cần
+          location: user.location
         };
     
         next();

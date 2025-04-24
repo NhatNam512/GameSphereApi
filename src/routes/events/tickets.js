@@ -56,6 +56,46 @@ router.get("/getTicket/:userId", async function (req, res) {
     catch(e){
         res.status(404).json({ status: false, message: "Not Found" })
     }
-})
+});
+
+// routes/ticket.js
+router.post("/verify-ticket", async (req, res) => {
+    try {
+      const { ticketId } = req.body;
+  
+      if (!ticketId) {
+        return res.status(400).json({ success: false, message: "Thiếu mã vé." });
+      }
+  
+      const ticket = await Ticket.findOne({ ticketId });
+  
+      if (!ticket) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy vé." });
+      }
+  
+      if (ticket.status === "used") {
+        return res.status(400).json({ success: false, message: "Vé đã được sử dụng." });
+      }
+  
+      // Cập nhật trạng thái đã sử dụng
+      ticket.status = "used";
+      ticket.usedAt = new Date();
+      await ticket.save();
+  
+      res.status(200).json({
+        success: true,
+        message: "Vé hợp lệ và đã được xác nhận.",
+        data: {
+          ticketId: ticket.ticketId,
+          userId: ticket.userId,
+          eventId: ticket.eventId,
+          usedAt: ticket.usedAt,
+        },
+      });
+    } catch (e) {
+      console.error("Lỗi xác nhận vé:", e);
+      res.status(500).json({ success: false, message: "Lỗi server." });
+    }
+  });  
 
 module.exports = router;

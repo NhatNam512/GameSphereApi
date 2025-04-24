@@ -3,6 +3,7 @@ const schema = mongoose.Schema;
 const oid = schema.ObjectId;
 const ticket = new schema({
     id: {type: oid},
+    ticketId: { type: String, unique: true },
     userId: {type: oid, ref: "users"},
     eventId: {type: oid, ref: "events"},
     orderId: {type: oid, ref: "order"},

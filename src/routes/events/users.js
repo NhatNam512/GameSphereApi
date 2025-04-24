@@ -10,6 +10,7 @@ const sgMail = require("@sendgrid/mail");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { sendPushNotification } = require('../../controllers/events/sendNotification');
 const { saveNotifications } = require('../../controllers/events/saveNotification');
+const { sendNotification } = require('../../controllers/auth/sendNotification');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -35,10 +36,19 @@ router.post("/login", async function (req, res) {
       return res.status(400).json({ status: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
     else {
-      const tokenPayload = { id: checkUser._id, email: checkUser.email };
-      var token = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1h" });
-      const refreshToken = JWT.sign({ id: email._id }, config.SECRETKEY, { expiresIn: '7d' })
+      const tokenPayload = {
+        id: checkUser._id,
+        email: checkUser.email,
+        role: checkUser.role,
+        tags: checkUser.tags,
+        location: checkUser.location
+      };
+
+      const token = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1h" });
+      const refreshToken = JWT.sign({ id: checkUser._id }, config.SECRETKEY, { expiresIn: '7d' });
       
+      await userModel.findByIdAndUpdate(checkUser._id, { refreshToken });
+
       res.status(200).json({
         status: 200,
         message: "Đăng nhập thành công",
@@ -249,24 +259,35 @@ router.put("/fcmToken", async function (req, res) {
   }
 });
 
-router.post('/send-notification', async function (req, res) {
-  try {
-    const { fcmToken, title, body, data } = req.body;
+router.post('/send-notification', sendNotification);
 
-    if (!fcmToken || !title || !body) {
-      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc: fcmToken, title, body' });
+router.post('/refresh-token', async function (req, res) {
+  const {refreshToken} = req.body;
+
+  if(!refreshToken){
+    return res.status(400).json({message: 'No refresh token provided'});
+  }
+  try {
+    const decoded = JWT.verify(refreshToken, config.SECRETKEY);
+    const userId = decoded.id
+
+    const user = await userModel.findById(userId)
+    if (!user.refreshToken.includes(refreshToken)) {
+      return res.status(404).json({ message: 'Invalid refresh token' });
     }
 
-    await sendPushNotification(fcmToken, title, body, data || {});
-    await saveNotifications(fcmToken, title, body, data)
-    res.status(200).json({ message: '✅ Notification sent' });
-  } catch (e) {
-    console.error('❌ Error sending notification:', e);
-    const errorMessage = e?.response?.data?.error || e.message || 'Unknown error';
-    res.status(500).json({ message: '❌ Lỗi khi gửi thông báo', error: errorMessage });
+    const newAccessToken = JWT.sign(
+      { id: user._id, email: user.email },
+      config.SECRETKEY,
+      { expiresIn: '1h' }
+    );
+    return res.status(200).json({
+      token: newAccessToken,
+    });
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid refresh token' });
   }
-});
-
+})
 
 module.exports = router;
 

@@ -5,7 +5,10 @@ const config = require("../../utils/tokenConfig");
 const orderModel = require('../../models/events/orderModel');
 const Ticket = require('../../models/events/ticketModel');
 const Event = require('../../models/events/eventModel');
+const User = require('../../models/userModel');
 const QRCode = require('qrcode');
+const shortid = require('shortid');
+const { sendUserNotification } = require('../../controllers/auth/sendNotification');
 
 router.get("/getOrders", async function (req, res) {
     try {
@@ -77,6 +80,7 @@ router.post("/createTicket", async function (req, res) {
             return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng." });
         }
 
+        const user = await User.findById(order.userId);
         // Kiểm tra trạng thái đơn hàng
         if (order.status !== "pending") {
             return res.status(400).json({ success: false, message: "Đơn hàng đã được thanh toán hoặc hủy." });
@@ -100,9 +104,10 @@ router.post("/createTicket", async function (req, res) {
 
         // Tạo số vé
         const ticketNumber = await generateTicketNumber();
-
+        //Tạo id vé
+        const ticketId = `${event._id.toString().slice(-4)}-TCK${String(shortid).padStart(4, '0')}`;
         // Tạo mã QR
-        const qrCodeData = `${ticketNumber}`;
+        const qrCodeData = `TicketID: ${ticketId}`;
         const qrCode = await QRCode.toDataURL(qrCodeData);
 
         const ticket = new Ticket({
@@ -110,13 +115,24 @@ router.post("/createTicket", async function (req, res) {
             userId: order.userId,
             eventId: order.eventId,
             qrCode: qrCode,
-            ticketNumber: ticketNumber,
+            ticketId: ticketId,
             amount: order.amount,
             status: "issued",
             createdAt: new Date(),
         });
 
         await ticket.save();
+        await sendUserNotification(
+            user.fcmTokens || [],
+            "Đặt vé thành công",
+            `Bạn đã đặt ${order.amount} vé cho sự kiện "${event.name}"`,
+            {
+              ticketId: ticket.ticketId,
+              eventId: event._id.toString(),
+              type: "ticket"
+            },
+            "ticket"
+          );
 
         // Cập nhật số vé đã bán
         const updatedEvent = await Event.updateOne(
