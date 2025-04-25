@@ -8,8 +8,6 @@ const crypto = require("crypto");
 const redis = require('../../redis/redisClient');
 const sgMail = require("@sendgrid/mail");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-const { sendPushNotification } = require('../../controllers/events/sendNotification');
-const { saveNotifications } = require('../../controllers/events/saveNotification');
 const { sendNotification } = require('../../controllers/auth/sendNotification');
 // Login
 router.get("/all", async function (req, res) {
@@ -64,7 +62,7 @@ router.post("/login", async function (req, res) {
   } catch (e) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
-})
+});
 
 // Register
 router.post("/register", async function (req, res) {
@@ -97,7 +95,7 @@ router.post("/register", async function (req, res) {
       text: `Mã OTP của bạn là: ${otp}. Có hiệu lực trong 5 phút.`,
     });
 
-    res.json({ message: "Đã gửi mã OTP, vui lòng kiểm tra email" });
+    res.status(200).json({ message: "Đã gửi mã OTP, vui lòng kiểm tra email" });
   } catch (e) {
     res.status(400).json({
       status: false,

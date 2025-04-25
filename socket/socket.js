@@ -1,6 +1,7 @@
 const { Server } = require("socket.io");
 
 let io;
+let heartbeatInterval;
 
 function initializeSocket(server) {
     io = new Server(server, {
@@ -44,6 +45,9 @@ function initializeSocket(server) {
         console.log("Chi tiết lỗi:", err);
     });
 
+    // Bắt đầu gửi tin nhắn định kỳ sau khi socket được khởi tạo
+    startPeriodicMessage();
+
     return io;
 }
 
@@ -52,6 +56,30 @@ function getSocketIO() {
         throw new Error("Socket.IO chưa được khởi tạo!");
     }
     return io;
+}
+
+// Hàm gửi tin nhắn định kỳ mỗi 5 phút
+function startPeriodicMessage() {
+    // Xóa interval cũ nếu có
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+    }
+
+    // Tạo interval mới
+    heartbeatInterval = setInterval(() => {
+        if (!io) return; // Đảm bảo io đã được khởi tạo
+
+        const currentTime = new Date().toLocaleString();
+        const message = {
+            type: 'periodic',
+            content: `Tin nhắn định kỳ - ${currentTime}`,
+            timestamp: Date.now()
+        };
+
+        // Gửi tin nhắn đến tất cả client
+        io.emit('periodicMessage', message);
+        console.log(`📨 Đã gửi tin nhắn định kỳ đến tất cả client - ${currentTime}`);
+    }, 5 * 60 * 1000); // 5 phút = 5 * 60 * 1000 milliseconds
 }
 
 module.exports = { initializeSocket, getSocketIO };
