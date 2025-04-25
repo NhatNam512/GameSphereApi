@@ -95,7 +95,9 @@ router.post("/register", async function (req, res) {
       text: `Mã OTP của bạn là: ${otp}. Có hiệu lực trong 5 phút.`,
     });
 
-    res.status(200).json({ message: "Đã gửi mã OTP, vui lòng kiểm tra email" });
+    res.status(200).json({ 
+      status: 200,
+      message: "Đã gửi mã OTP, vui lòng kiểm tra email" });
   } catch (e) {
     res.status(400).json({
       status: false,
