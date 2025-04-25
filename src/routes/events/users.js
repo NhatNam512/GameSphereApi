@@ -131,7 +131,9 @@ router.post("/verify-otp", async (req, res) => {
   await redis.del(`pending-user:${email}`);
   await redis.del(`otp-last:${email}`);
 
-  res.status(200).json({ message: "Tạo tài khoản thành công" });
+  res.status(200).json({ 
+    status: 200,
+    message: "Tạo tài khoản thành công" });
 });
 
 router.put("/addLocation", async function (req, res) {
