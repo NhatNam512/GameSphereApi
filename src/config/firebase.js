@@ -1,6 +1,11 @@
 const { GoogleAuth } = require('google-auth-library');
 const path = require('path');
-const serviceAccount = require(path.resolve(process.env.GOOGLE_CONFIG));
+let serviceAccount;
+if (process.env.GOOGLE_CONFIG.startsWith('{')) {
+  serviceAccount = JSON.parse(process.env.GOOGLE_CONFIG);
+} else {
+  serviceAccount = require(path.resolve(process.env.GOOGLE_CONFIG));
+}
 
 let cachedAccessToken = null;
 let cachedExpireTime = 0;
