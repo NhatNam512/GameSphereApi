@@ -1,32 +1,37 @@
-const axios = require('axios');
-const qs = require('qs'); // hoặc querystring nếu thích
+const { GoogleAuth } = require('google-auth-library');
+const serviceAccount = require('../../eventsphere-e9bf4-144bdb8c8b83.json');
+
+let cachedAccessToken = null;
+let cachedExpireTime = 0;
 
 async function getAccessToken() {
-  try {
-    const tokenResponse = await axios.post(
-      'https://oauth2.googleapis.com/token',
-      qs.stringify({
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        refresh_token: process.env.REFRESH_TOKEN,
-        grant_type: 'refresh_token'
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    );
+  const now = Date.now();
 
-    console.log('New Access Token:', tokenResponse.data.access_token);
-    return tokenResponse.data.access_token;
+  if (cachedAccessToken && cachedExpireTime - now > 60 * 1000) {
+    return cachedAccessToken;
+  }
+
+  try {
+    const auth = new GoogleAuth({
+      credentials: serviceAccount,
+      scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
+    });
+
+    const client = await auth.getClient();
+    const headers = await client.getRequestHeaders(); // headers.Authorization
+
+    const accessToken = headers['Authorization'].split('Bearer ')[1];
+
+    cachedAccessToken = accessToken;
+    cachedExpireTime = now + (50 * 60 * 1000); // Token sống 1h, cache 50p
+
+    console.log('✅ Access token refreshed.');
+    return cachedAccessToken;
 
   } catch (err) {
-    console.error('Lỗi khi lấy access_token:', err.response?.data || err.message);
+    console.error('❌ Lỗi khi lấy access_token:', err.response?.data || err.message || err);
     return null;
   }
 }
 
-module.exports = {
-  getAccessToken
-};
+module.exports = { getAccessToken };

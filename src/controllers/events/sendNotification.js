@@ -1,36 +1,50 @@
 const axios = require('axios');
 const { getAccessToken } = require('../../config/firebase');
-
+const serviceAccount = require('../../../eventsphere-e9bf4-144bdb8c8b83.json'); 
 // Gửi thông báo push đến 1 thiết bị
 async function sendPushNotification(fcmToken, title, body, data = {}) {
-  try {
-    const accessToken = await getAccessToken();
+  const accessToken = await getAccessToken();
+  
+  if (!accessToken) {
+    console.error('❌ Không thể lấy access token.');
+    return;
+  }
+  if (!fcmToken) {
+    console.error('❌ FCM Token không hợp lệ.');
+    return;
+  }
 
-    const response = await axios.post(
-      'https://fcm.googleapis.com/v1/projects/gamesphere-42d9e/messages:send',
-      {
-        message: {
-          token: fcmToken,
-          notification: { title, body },
-          data, // optional custom data
-        },
+  const message = {
+    message: {
+      token: fcmToken,
+      notification: {
+        title: title,
+        body: body,
       },
+      data,
+    }
+  };
+  
+  try {
+    const response = await axios.post(
+      `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`,
+      message,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
       }
     );
-
-    console.log('✅ Notification sent:', response.data);
+    
+    console.log('✅ Push notification sent:', response.data);
   } catch (error) {
     if (error.response) {
-      console.error('❌ FCM Error:', error.response.data);
+      console.log('❌ FCM Error:', JSON.stringify(error.response.data, null, 2)); // log chi tiết
     } else {
-      console.error('❌ Error:', error.message);
+      console.log('❌ Error:', error.message);
     }
-  }
+}
 }
 
 module.exports = {

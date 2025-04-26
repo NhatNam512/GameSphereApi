@@ -9,9 +9,9 @@ exports.sendNotification = async (req, res) => {
       return res.status(400).json({ error: 'Thiếu thông tin bắt buộc: fcmToken, title, body, type' });
     }
 
-    await sendPushNotification(fcmToken, title, body, data, type || {});
+    await sendPushNotification(fcmToken, title, body, data || {});
     await saveNotifications(fcmToken, title, body, data, type);
-
+    
     res.status(200).json({ message: 'Notification sent' });
   } catch (e) {
     console.error('Error sending notification:', e);
@@ -19,16 +19,21 @@ exports.sendNotification = async (req, res) => {
     res.status(500).json({ message: 'Lỗi khi gửi thông báo', error: errorMessage });
   }
 };
+
 exports.sendUserNotification = async (fcmTokens, title, body, data = {}, type) => {
-    try {
-      if (!Array.isArray(fcmTokens) || fcmTokens.length === 0) return;
-  
-      for (const token of fcmTokens) {
-        await sendPushNotification(token, title, body, data, type);
-        await saveNotifications(token, title, body, data, type);
-      }
-    } catch (e) {
-      console.error("Lỗi khi gửi thông báo đến user:", e.message);
-    }
-  };
-  
+  try {
+    if (!Array.isArray(fcmTokens) || fcmTokens.length === 0) return;
+
+    const tasks = fcmTokens.map(token => (
+      Promise.all([
+        sendPushNotification(token, title, body, data || {}),
+        saveNotifications(token, title, body, data, type)
+      ])
+    ));
+
+    await Promise.all(tasks);
+
+  } catch (e) {
+    console.error("❌ Lỗi khi gửi thông báo đến user:", e.message);
+  }
+};
