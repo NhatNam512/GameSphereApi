@@ -26,8 +26,15 @@ const events = new schema({
     latitude: { type: Number },
     location: { type: String },
     location_map: {
-        type: { type: String, enum: ['Point'], default: 'Point' },
-        coordinates: { type: [Number], index: '2dsphere' }, // [lng, lat]
+        type: { 
+            type: String, 
+            enum: ['Point'], 
+            default: 'Point' 
+        },
+        coordinates: { 
+            type: [Number], 
+            index: '2dsphere' 
+        }, // [lng, lat]
     },
     userId: { type: String, ref: "users" },
     

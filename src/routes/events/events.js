@@ -59,7 +59,9 @@ router.get("/home", async function (req, res) {
 
       console.time("🚀 res.json");
       res.status(200).json({
-        parsedData
+        status: true,
+        message: "Lấy danh sách sự kiện thành công (cache)",
+        data: parsedData
       });
       console.timeEnd("🚀 res.json");
 
@@ -68,18 +70,27 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find()
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map")
       .lean();
     console.timeEnd("🗃️ DB Query");
 
+    // 👉 Map location_map -> longitude/latitude
+    const mappedEvents = events.map(ev => {
+      if (ev.location_map && ev.location_map.coordinates) {
+        ev.longitude = ev.location_map.coordinates[0];
+        ev.latitude = ev.location_map.coordinates[1];
+      }
+      return ev;
+    });
+
     console.time("📤 Redis SET");
-    await redis.set(cacheKey, JSON.stringify(events), 'EX', 300);
+    await redis.set(cacheKey, JSON.stringify(mappedEvents), 'EX', 300);
     console.timeEnd("📤 Redis SET");
 
     res.status(200).json({
       status: true,
       message: "Lấy danh sách sự kiện thành công",
-      data: events
+      data: mappedEvents
     });
 
   } catch (e) {
@@ -87,7 +98,6 @@ router.get("/home", async function (req, res) {
     res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
   }
 });
-
 
 router.get("/detail/:id", async function (req, res, next) {
   try {
@@ -157,14 +167,16 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
       ticketPrice, 
       ticketQuantity, 
       rating, 
-      longitude, 
-      latitude, 
-      userId
+      userId,
+      location_map: {
+        type: "Point",
+        coordinates: [longitude, latitude] // đúng chuẩn GeoJSON
+      }
     });
 
     // Xóa cache để cập nhật danh sách mới
     await redis.del("events");
-    await updateEventVector(newItem._id.toString(), description);
+    // await updateEventVector(newItem._id.toString(), description);
     
     // Gửi thông báo đến Redis Pub/Sub
     pub.publish("event_updates", JSON.stringify(newItem));
@@ -180,39 +192,50 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
   }
 });
 
-
 router.put("/edit", async function (req, res) {
   try {
-    const { id, name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude } = req.body;
+    const {
+      id, name, description, timeStart, timeEnd,
+      avatar, images, categories, banner,
+      location, ticketPrice, ticketQuantity,
+      rating, longitude, latitude
+    } = req.body;
+
     const itemUpdate = await eventModel.findById(id);
 
-    if (itemUpdate) {
-      itemUpdate.name = name ? name : itemUpdate.name;
-      itemUpdate.description = description ? description : itemUpdate.description;
-      itemUpdate.timeStart = timeStart ? timeStart : itemUpdate.timeStart;
-      itemUpdate.timeEnd = timeEnd ? timeEnd : itemUpdate.timeEnd;
-      itemUpdate.avatar = avatar ? avatar : itemUpdate.avatar;
-      itemUpdate.images = images ? images : itemUpdate.images;
-      itemUpdate.categories = categories ? categories : itemUpdate.categories;
-      itemUpdate.banner = banner ? banner : itemUpdate.banner;
-      itemUpdate.ticketPrice = ticketPrice ? ticketPrice : itemUpdate.ticketPrice;
-      itemUpdate.ticketQuantity = ticketQuantity ? ticketQuantity : itemUpdate.ticketQuantity;
-      itemUpdate.location = location ? location : itemUpdate.location;
-      itemUpdate.rating = rating ? rating : itemUpdate.rating;
-      itemUpdate.longitude = longitude ? longitude : itemUpdate.longitude;
-      itemUpdate.latitude = latitude ? latitude : itemUpdate.latitude;
+    if (!itemUpdate) {
+      return res.status(404).json({ status: false, message: "Event not found" });
+    }
 
-      await itemUpdate.save();
-      res.status(200).json({ status: true, message: "Successfully" });
+    // Cập nhật các trường cơ bản
+    if (name) itemUpdate.name = name;
+    if (description) itemUpdate.description = description;
+    if (timeStart) itemUpdate.timeStart = timeStart;
+    if (timeEnd) itemUpdate.timeEnd = timeEnd;
+    if (avatar) itemUpdate.avatar = avatar;
+    if (images) itemUpdate.images = images;
+    if (categories) itemUpdate.categories = categories;
+    if (banner) itemUpdate.banner = banner;
+    if (ticketPrice) itemUpdate.ticketPrice = ticketPrice;
+    if (ticketQuantity) itemUpdate.ticketQuantity = ticketQuantity;
+    if (rating) itemUpdate.rating = rating;
+    if (location) itemUpdate.location = location; // locationName là tên hiển thị
+
+    // Cập nhật tọa độ nếu có
+    if (longitude && latitude) {
+      itemUpdate.location_map = {
+        type: "Point",
+        coordinates: [longitude, latitude]
+      };
     }
-    else {
-      res.status(300).json({ status: true, message: "Not found" });
-    }
+
+    await itemUpdate.save();
+    res.status(200).json({ status: true, message: "Successfully updated" });
+
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error: " + e.message });
   }
-  catch (e) {
-    res.status(400).json({ status: false, message: "Error" + e });
-  }
-})
+});
 
 router.get("/search", async function (req, res) {
   try {
