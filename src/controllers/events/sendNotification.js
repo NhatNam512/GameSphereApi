@@ -13,7 +13,6 @@ async function sendPushNotification(fcmToken, title, body, data = {}) {
     console.error('❌ FCM Token không hợp lệ.');
     return;
   }
-
   const message = {
     message: {
       token: fcmToken,
