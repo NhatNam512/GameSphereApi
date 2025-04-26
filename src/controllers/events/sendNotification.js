@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { getAccessToken } = require('../../config/firebase');
-const serviceAccount = require('../../../eventsphere-e9bf4-144bdb8c8b83.json'); 
+const path = require('path');
+const serviceAccount = require(path.resolve(process.env.GOOGLE_CONFIG));
 // Gửi thông báo push đến 1 thiết bị
 async function sendPushNotification(fcmToken, title, body, data = {}) {
   const accessToken = await getAccessToken();

@@ -1,5 +1,6 @@
 const { GoogleAuth } = require('google-auth-library');
-const serviceAccount = require('../../eventsphere-e9bf4-144bdb8c8b83.json');
+const path = require('path');
+const serviceAccount = require(path.resolve(process.env.GOOGLE_CONFIG));
 
 let cachedAccessToken = null;
 let cachedExpireTime = 0;

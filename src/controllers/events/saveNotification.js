@@ -1,5 +1,5 @@
 const { getSocketIO } = require('../../../socket/socket');
-const Notification = require('../../models/events/notificationModel'); // ❗️sai tên Notificaiton
+const Notification = require('../../models/events/notificationModel');
 const User = require('../../models/userModel');
 
 async function saveNotifications(fcmToken, title, body, data = {}) {
@@ -32,7 +32,7 @@ async function saveNotifications(fcmToken, title, body, data = {}) {
     });
 
   } catch (error) {
-    console.error('❌ Error save notification:', error.message); // ❗️Sửa error message đúng
+    console.error('❌ Error save notification:', error.message); 
   }
 }
 
