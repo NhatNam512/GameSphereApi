@@ -13,7 +13,7 @@ async function saveNotifications(fcmToken, title, body, data = {}) {
 
     // Tạo notification mới
     const newNoti = new Notification({
-      userId: user._id,
+      user: user._id,
       title,
       body,
       data,
