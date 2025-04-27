@@ -7,6 +7,7 @@ const Ticket = require('../../models/events/ticketModel');
 const Event = require('../../models/events/eventModel');
 const User = require('../../models/userModel');
 const QRCode = require('qrcode');
+const Counter = require('../../models/events/counterModel')
 const shortid = require('shortid');
 const { sendUserNotification } = require('../../controllers/auth/sendNotification');
 
@@ -55,19 +56,15 @@ router.post("/createOrder", async function (req, res) {
 });
 
 const generateTicketNumber = async () => {
-    let ticketNumber;
-    let isUnique = false;
-
-    while (!isUnique) {
-        ticketNumber = await Ticket.findOne().sort({ ticketNumber: -1 }).then(ticket => ticket ? ticket.ticketNumber + 1 : 100000);
-        const existingTicket = await Ticket.findOne({ ticketNumber });
-        isUnique = !existingTicket; // Kiểm tra xem số vé đã tồn tại hay chưa
-    }
-
-    return ticketNumber;
+    const counter = await Counter.findByIdAndUpdate(
+        { _id: 'ticketNumber' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+    );
+    return counter.seq;
 };
 
-router.post("/createTicket", async function (req, res) {
+router.post("/createTicket", async (req, res) => {
     try {
         const { orderId, paymentId } = req.body;
         if (!orderId || !paymentId) {
@@ -81,74 +78,83 @@ router.post("/createTicket", async function (req, res) {
         }
 
         const user = await User.findById(order.userId);
-        // Kiểm tra trạng thái đơn hàng
+        const event = await Event.findById(order.eventId);
+
+        // Kiểm tra đơn hàng và sự kiện
+        if (!event) {
+            return res.status(404).json({ success: false, message: "Không tìm thấy sự kiện." });
+        }
+
         if (order.status !== "pending") {
             return res.status(400).json({ success: false, message: "Đơn hàng đã được thanh toán hoặc hủy." });
         }
 
-        // Kiểm tra vé còn không
-        const event = await Event.findById(order.eventId);
-        if (!event || event.soldTickets + order.amount > event.ticketQuantity) {
+        if (event.soldTickets + order.amount > event.ticketQuantity) {
             return res.status(400).json({ success: false, message: "Không đủ vé." });
         }
 
-        // Cập nhật trạng thái đơn hàng
+        // Cập nhật đơn hàng sang paid
         const updatedOrder = await orderModel.updateOne(
             { _id: orderId, status: "pending" },
             { $set: { status: "paid" } }
         );
-
         if (updatedOrder.modifiedCount === 0) {
             return res.status(400).json({ success: false, message: "Đơn hàng đã bị thay đổi trạng thái trước đó." });
         }
 
-        // Tạo số vé
+        // Sinh ticketNumber và ticketId
         const ticketNumber = await generateTicketNumber();
-        //Tạo id vé
-        const ticketId = `${event._id.toString().slice(-4)}-TCK${String(shortid).padStart(4, '0')}`;
-        // Tạo mã QR
+        const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+
+        // Tạo QR code
         const qrCodeData = `TicketID: ${ticketId}`;
         const qrCode = await QRCode.toDataURL(qrCodeData);
 
+        // Tạo vé
         const ticket = new Ticket({
             orderId: order._id,
             userId: order.userId,
             eventId: order.eventId,
             qrCode: qrCode,
             ticketId: ticketId,
+            ticketNumber: ticketNumber,
             amount: order.amount,
             status: "issued",
             createdAt: new Date(),
         });
 
-        await ticket.save();
-        await sendUserNotification(
-            user.fcmTokens || [],
-            "Đặt vé thành công",
-            `Bạn đã đặt ${order.amount} vé cho sự kiện "${event.name}"`,
-            {
-              ticketId: ticket.ticketId,
-              eventId: event._id.toString(),
-              type: "ticket"
-            },
-            "ticket"
-          );
+        // Lưu vé và cập nhật soldTickets đồng thời
+        await Promise.all([
+            ticket.save(),
+            Event.updateOne(
+                { _id: event._id, soldTickets: { $lte: event.ticketQuantity - order.amount } },
+                { $inc: { soldTickets: order.amount } }
+            )
+        ]);
 
-        // Cập nhật số vé đã bán
-        const updatedEvent = await Event.updateOne(
-            { _id: event._id, soldTickets: { $lte: event.ticketQuantity - order.amount } },
-            { $inc: { soldTickets: order.amount } }
-        );
-
-        if (updatedEvent.modifiedCount === 0) {
-            return res.status(400).json({ success: false, message: "Không đủ vé, vui lòng thử lại." });
+        // Gửi notify nếu có token
+        if (user.fcmTokens && user.fcmTokens.length > 0) {
+            await sendUserNotification(
+                user.fcmTokens,
+                "Đặt vé thành công",
+                `Bạn đã đặt ${order.amount} vé cho sự kiện "${event.name}"`,
+                {
+                    ticketId: ticket.ticketId,
+                    eventId: event._id.toString(),
+                    type: "ticket"
+                },
+                "ticket"
+            );
         }
 
-        res.status(200).json({ success: true, data: ticket });
+        return res.status(200).json({ success: true, data: ticket });
 
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ success: false, message: "Lỗi khi tạo vé." });
+        console.error(e);
+        if (e.code === 11000) {
+            return res.status(400).json({ success: false, message: "Vui lòng thử lại, số vé đã bị trùng." });
+        }
+        return res.status(500).json({ success: false, message: "Lỗi khi tạo vé." });
     }
 });
 
