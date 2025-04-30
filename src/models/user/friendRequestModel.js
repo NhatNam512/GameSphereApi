@@ -6,7 +6,7 @@ const friendRequestSchema = new schema({
     id: { type: oid },
     senderId: { type: oid, ref: "users" },
     receiverId: { type: oid, ref: "users" },
-    status: { enum: ["pending", "accepted", "declined"], default: "pending" },
+    status: { type: String, enum: ["pending", "accepted", "declined"], default: "pending" },
 }, {
     timestamps: true,
     indexes: [

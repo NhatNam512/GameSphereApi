@@ -19,6 +19,7 @@
     "debug": "~2.6.9",
     "dotenv": "^16.4.7",
     "express": "~4.16.1",
+    "express-rate-limit": "^7.5.0",
     "google-auth-library": "^9.15.1",
     "hbs": "~4.0.4",
     "http-errors": "~1.6.3",
