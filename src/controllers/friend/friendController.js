@@ -58,7 +58,7 @@ exports.searchUsers = async (req, res) => {
                                 { email: { $regex: searchTerm, $options: 'i' } }
                             ]
                         },
-                        { _id: { $ne: mongoose.Types.ObjectId(userId) } }
+                        { _id: { $ne: new mongoose.Types.ObjectId(userId) } }
                     ]
                 }
             },

@@ -1,0 +1,12 @@
+{"level":"info","message":"Cache miss for search term: nam"}
+{"error":"Class constructor ObjectId cannot be invoked without 'new'","level":"error","message":"Error in searchUsers:"}
+{"level":"info","message":"Cache miss for search term: nam"}
+{"error":"Class constructor ObjectId cannot be invoked without 'new'","level":"error","message":"Error in searchUsers:"}
+{"level":"info","message":"Cache miss for search term: nam"}
+{"level":"info","message":"Search completed for term: nam, found 3 results"}
+{"level":"info","message":"Cache miss for search term: Nam"}
+{"level":"info","message":"Search completed for term: Nam, found 3 results"}
+{"level":"info","message":"Cache miss for search term: NhatNam"}
+{"level":"info","message":"Search completed for term: NhatNam, found 1 results"}
+{"level":"info","message":"Cache miss for search term: nguyen"}
+{"level":"info","message":"Search completed for term: nguyen, found 16 results"}
