@@ -15,7 +15,7 @@ const notificationSchema = new schema({
         type: Date,
         default: Date.now
       },
-    type: {type: Number}
+    type: {type: String}
 });
 
 module.exports = mongoose.models.notifications || mongoose.model("notifications", notificationSchema);

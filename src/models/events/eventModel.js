@@ -36,7 +36,7 @@ const events = new schema({
             index: '2dsphere' 
         }, // [lng, lat]
     },
-    userId: { type: String, ref: "users" },
+    userId: { type: oid, ref: "users" },
     
     embedding: { type: [Number] }
 });
@@ -45,5 +45,7 @@ events.index({ timeStart: 1 });
 events.index({ categories: 1 });
 events.index({ userId: 1 });
 events.index({ status: 1 });
+events.index({ name: 1 });
+events.index({ description: 1 });
 
 module.exports = mongoose.models.events || mongoose.model("events", events);

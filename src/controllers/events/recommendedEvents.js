@@ -45,7 +45,10 @@ exports.getRecommendedEvents = async (req, res) => {
 
       const response = { from: 'cold-start', events };
       await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5); // Cache 5 phút
-      return res.json(response);
+      return res.json({
+        status: 200,
+        data: response
+      });
     }
 
     // 👉 CÓ LỊCH SỬ TƯƠNG TÁC
@@ -71,7 +74,10 @@ exports.getRecommendedEvents = async (req, res) => {
 
     const response = { from: 'personalized', events: recommended };
     await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);
-    return res.json(response);
+    return res.json({
+      status: 200,
+      data: response
+    });
 
   } catch (err) {
     res.status(500).json({ error: err.message });

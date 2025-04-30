@@ -26,7 +26,10 @@ const authenticate = async(req, res, next) => {
           id: user._id,
           email: user.email,
           tags: user.tags, // Có thể thêm nếu cần
-          location: user.location
+          location: user.location, 
+          fcmTokens: user.fcmTokens,
+          username: user.username,
+          picUrl: user.picUrl
         };
     
         next();

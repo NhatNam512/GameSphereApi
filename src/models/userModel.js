@@ -24,4 +24,6 @@ const users = new schema({
     fcmTokens: { type: [] },
     refreshToken: { type: String },
 });
+users.index({username: 1});
+users.index({email: 1});
 module.exports = mongoose.model.users || mongoose.model("users", users);
