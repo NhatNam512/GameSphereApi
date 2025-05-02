@@ -66,9 +66,7 @@ exports.searchUsers = async (req, res) => {
                 $project: {
                     username: 1,
                     email: 1,
-                    name: 1,
                     picUrl: 1,
-                    createdAt: 1
                 }
             },
             { $limit: 20 }
@@ -112,6 +110,7 @@ exports.sendFriendRequest = async (req, res) => {
         const { receiverId } = req.body;
 
         const receiver = await User.findById(receiverId).session(session);
+        console.log(receiver);
         if (!receiver) {
             await session.abortTransaction();
             return res.status(404).json({ message: "Người nhận không tồn tại." });

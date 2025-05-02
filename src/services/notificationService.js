@@ -1,11 +1,13 @@
-const { sendNotification } = require("../controllers/auth/sendNotification");
+const { sendUserNotification } = require("../controllers/auth/sendNotification");
 
 class NotificationService {
     async sendFriendRequestNotification(receiver, data = {}) {
         const tokens = receiver?.fcmTokens || [];
         if (tokens.length === 0) return;
 
-        return sendNotification(
+        console.log("FCM Token: "+tokens);
+        
+        return sendUserNotification(
             tokens,
             "Lời mời kết bạn",
             "Bạn có lời mời kết bạn mới!",
@@ -18,7 +20,7 @@ class NotificationService {
         const tokens = sender?.fcmTokens || [];
         if (tokens.length === 0) return;
 
-        return sendNotification(
+        return sendUserNotification(
             tokens,
             "Lời mời kết bạn",
             `${username} đã chấp nhận lời mời của bạn!`,
