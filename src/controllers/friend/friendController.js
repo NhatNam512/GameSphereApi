@@ -7,6 +7,7 @@ const notificationService = require('../../services/notificationService');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const logger = require('../../utils/logger');
+const friendshipModel = require('../../models/user/friendshipModel');
 
 // Rate limiting middleware
 exports.friendRequestLimiter = rateLimit({
@@ -157,7 +158,7 @@ exports.acceptFriendRequest = async (req, res) => {
         const username = req.user.username;
 
         const request = await FriendRequest.findById(requestId);
-        if (!request || request.receiverId.toString() !== userId) {
+        if (!request || request.receiverId.toString() !== userId.toString()) {
             return res.status(404).json({ message: "Lời mời không hợp lệ hoặc không tồn tại." });
         }
 
@@ -166,6 +167,9 @@ exports.acceptFriendRequest = async (req, res) => {
         }
 
         request.status = "accepted";
+        const [uid1, uid2] = [request.senderId.toString(), request.receiverId.toString()].sort();
+        await friendshipModel.create({ user1: uid1, user2: uid2 });
+
         await request.save();
 
         const sender = await User.findById(request.senderId);
@@ -216,8 +220,8 @@ exports.getPendingRequests = async (req, res) => {
             receiverId: userId,
             status: 'pending'
         })
-        .populate('senderId', 'username email name picUrl')
-        .sort({ createdAt: -1 });
+            .populate('senderId', 'username email name picUrl')
+            .sort({ createdAt: -1 });
 
         return res.status(200).json({ requests });
     } catch (error) {
@@ -236,24 +240,53 @@ exports.getFriendsList = async (req, res) => {
             return res.status(200).json({ friends: JSON.parse(cached) });
         }
 
-        const accepted = await FriendRequest.find({
-            status: 'accepted',
+        const friendships = await friendshipModel.find({
             $or: [
-                { senderId: userId },
-                { receiverId: userId }
+                { user1: userId },
+                { user2: userId }
             ]
-        }).populate('senderId receiverId', 'username picUrl');
+        }).populate('user1 user2', 'username picUrl');
 
-        const friends = accepted.map(req => {
-            return req.senderId._id.toString() === userId
-                ? req.receiverId
-                : req.senderId;
+        const friends = friendships.map(f => {
+            return f.user1._id.toString() === userId ? f.user2 : f.user1;
         });
 
-        await redisClient.setex(cacheKey, 300, JSON.stringify(friends));
+        await redisClient.set(cacheKey, JSON.stringify(friends), 'EX', 300);
         return res.status(200).json({ friends });
     } catch (error) {
         logger.error("Error in getFriendsList:", error);
         return res.status(500).json({ message: "Internal Server Error" });
     }
 };
+
+exports.unfriend = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { friendId } = req.params;
+
+        const [uid1, uid2] = [userId, friendId].sort();
+        const result = await friendshipModel.findOneAndDelete({ user1: uid1, user2: uid2 });
+
+        if (!result) {
+            return res.status(404).json({ message: "Không tìm thấy quan hệ bạn bè." });
+        }
+
+        await redisClient.del(`friendList:${userId}`);
+        await redisClient.del(`friendList:${friendId}`);
+
+        return res.status(200).json({ message: "Đã huỷ kết bạn." });
+    } catch (error) {
+        logger.error("Error in unfriend:", error);
+        return res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+exports.checkFriendship = async (req, res) => {
+    const userId = req.user.id;
+    const { otherUserId } = req.params;
+
+    const [uid1, uid2] = [userId, otherUserId].sort();
+    const isFriend = await friendshipModel.exists({ user1: uid1, user2: uid2 });
+
+    return res.status(200).json({ isFriend: !!isFriend });
+};
+
