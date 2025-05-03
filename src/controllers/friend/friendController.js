@@ -40,57 +40,63 @@ exports.searchUsers = async (req, res) => {
 
         const userId = req.user.id;
         const cacheKey = `search:${userId}:${searchTerm}`;
-        const cached = await redisClient.get(cacheKey);
-        if (cached) {
+        let users = await redisClient.get(cacheKey);
+        if (users) {
             logger.info(`Cache hit for search term: ${searchTerm}`);
-            return res.json(JSON.parse(cached));
+            users = JSON.parse(users);
+        } else {
+            logger.info(`Cache miss for search term: ${searchTerm}`);
+            session.startTransaction();
+
+            users = await User.aggregate([
+                {
+                    $match: {
+                        $and: [
+                            {
+                                $or: [
+                                    { username: { $regex: searchTerm, $options: 'i' } },
+                                    { email: { $regex: searchTerm, $options: 'i' } }
+                                ]
+                            },
+                            { _id: { $ne: new mongoose.Types.ObjectId(userId) } }
+                        ]
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        username: 1,
+                        email: 1,
+                        picUrl: 1,
+                    }
+                },
+                { $limit: 20 }
+            ]).session(session);
+
+            await session.commitTransaction();
+            // Only cache user info, not relationshipStatus
+            await redisClient.setex(cacheKey, 3600, JSON.stringify(users));
         }
 
-        logger.info(`Cache miss for search term: ${searchTerm}`);
-        session.startTransaction();
-
-        const users = await User.aggregate([
-            {
-                $match: {
-                    $and: [
-                        {
-                            $or: [
-                                { username: { $regex: searchTerm, $options: 'i' } },
-                                { email: { $regex: searchTerm, $options: 'i' } }
-                            ]
-                        },
-                        { _id: { $ne: new mongoose.Types.ObjectId(userId) } }
-                    ]
-                }
-            },
-            {
-                $project: {
-                    username: 1,
-                    email: 1,
-                    picUrl: 1,
-                }
-            },
-            { $limit: 20 }
-        ]).session(session);
-
-        const result = await Promise.all(users.map(async (user) => {
-            const friendRequest = await FriendRequest.findOne({
-                $or: [
-                    { senderId: userId, receiverId: user._id },
-                    { senderId: user._id, receiverId: userId }
-                ]
-            }).session(session);
-
-            return {
-                ...user,
-                relationshipStatus: friendRequest ? friendRequest.status : 'none'
-            };
+        // Always compute relationshipStatus dynamically
+        const userIds = users.map(u => u._id.toString());
+        const friendRequests = await FriendRequest.find({
+            $or: [
+                { senderId: userId, receiverId: { $in: userIds } },
+                { senderId: { $in: userIds }, receiverId: userId }
+            ]
+        });
+        const statusMap = {};
+        friendRequests.forEach(fr => {
+            const otherId = fr.senderId.toString() === userId ? fr.receiverId.toString() : fr.senderId.toString();
+            statusMap[otherId] = fr.status;
+        });
+        const result = users.map(user => ({
+            ...user,
+            relationshipStatus: statusMap[user._id.toString()] || 'none'
         }));
 
-        await session.commitTransaction();
-        await redisClient.setex(cacheKey, 3600, JSON.stringify(result));
         logger.info(`Search completed for term: ${searchTerm}, found ${result.length} results`);
-
         return res.json(result);
 
     } catch (error) {
