@@ -197,7 +197,7 @@ exports.declineFriendRequest = async (req, res) => {
         const userId = req.user.id;
 
         const request = await FriendRequest.findById(requestId);
-        if (!request || request.receiverId.toString() !== userId) {
+        if (!request || request.receiverId.toString() !== userId.toString()) {
             return res.status(404).json({ message: "Lời mời không hợp lệ hoặc không tồn tại." });
         }
 
