@@ -273,6 +273,12 @@ exports.unfriend = async (req, res) => {
 
         await redisClient.del(`friendList:${userId}`);
         await redisClient.del(`friendList:${friendId}`);
+        await FriendRequest.deleteMany({
+            $or: [
+                { senderId: userId, receiverId: friendId },
+                { senderId: friendId, receiverId: userId }
+            ]
+        });
 
         return res.status(200).json({ message: "Đã huỷ kết bạn." });
     } catch (error) {
