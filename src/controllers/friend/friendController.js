@@ -248,7 +248,9 @@ exports.getFriendsList = async (req, res) => {
         }).populate('user1 user2', 'username picUrl');
 
         const friends = friendships.map(f => {
-            return f.user1._id.toString() === userId ? f.user2 : f.user1;
+            const u1 = f.user1._id.toString();
+            const u2 = f.user2._id.toString();
+            return u1 === userId.toString() ? f.user2 : f.user1;
         });
 
         await redisClient.set(cacheKey, JSON.stringify(friends), 'EX', 300);
