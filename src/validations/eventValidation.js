@@ -18,7 +18,13 @@ const eventSchema = Joi.object({
   rating: Joi.number(),
   longitude: Joi.number(),
   latitude: Joi.number(),
-  userId: Joi.string().required()
+  userId: Joi.string().required(),
+  tags: Joi.array().items(Joi.string())
 });
 
-module.exports = eventSchema; 
+const eventTagsSchema = Joi.object({
+  id: Joi.string().required(),
+  tags: Joi.array().items(Joi.string()).required()
+});
+
+module.exports = { eventSchema, eventTagsSchema }; 

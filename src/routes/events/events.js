@@ -5,9 +5,10 @@ const config = require("../../utils/tokenConfig");
 const eventModel = require('../../models/events/eventModel');
 const redis = require('../../redis/redisClient');
 const validate = require('../../middlewares/validation');
-const eventSchema = require('../../validations/eventValidation');
+const { eventSchema, eventTagsSchema } = require('../../validations/eventValidation');
 const authenticate = require('../../middlewares/auth');
 const { getRecommendedEvents } = require('../../controllers/events/recommendedEvents');
+const { addTagsToEvent } = require('../../controllers/events/tagController');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -152,7 +153,7 @@ router.get("/categories/:id", async function (req,  res) {
 
 router.post("/add", validate(eventSchema), async function (req, res, next) {
   try {
-    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId } = req.body;
+    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId, tags } = req.body;
     
     const newItem = await eventModel.create({ 
       name, 
@@ -168,6 +169,7 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
       ticketQuantity, 
       rating, 
       userId,
+      tags,
       location_map: {
         type: "Point",
         coordinates: [longitude, latitude] // đúng chuẩn GeoJSON
@@ -319,5 +321,7 @@ router.post("/sort", async function (req, res) {
 });
 
 router.get("/for-you", authenticate, getRecommendedEvents);
+
+router.post('/add-tags', validate(eventTagsSchema), addTagsToEvent);
 
 module.exports = router;
