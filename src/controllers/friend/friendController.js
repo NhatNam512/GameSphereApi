@@ -87,10 +87,14 @@ exports.searchUsers = async (req, res) => {
             ]
         });
         const statusMap = {};
+
         friendRequests.forEach(fr => {
-            const otherId = fr.senderId.toString() === userId ? fr.receiverId.toString() : fr.senderId.toString();
+            const sender = fr.senderId.toString();
+            const receiver = fr.receiverId.toString();
+            const otherId = sender === userId.toString() ? receiver : sender;
             statusMap[otherId] = fr.status;
         });
+
         const result = users.map(user => ({
             ...user,
             relationshipStatus: statusMap[user._id.toString()] || 'none'

@@ -10,6 +10,7 @@ const redis = require('../../redis/redisClient');
 const sgMail = require("@sendgrid/mail");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { sendNotification } = require('../../controllers/auth/sendNotification');
+const authenticate = require('../../middlewares/auth');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -230,45 +231,42 @@ router.get("/:id", async function (req, res) {
   }
 })
 
-router.put("/fcmToken", async function (req, res) {
+router.put("/fcmToken", authenticate, async (req, res) => {
   try {
-    const { id, fcmToken } = req.body;
-    const itemUpdate = await userModel.findById(id);
-
-    if (!itemUpdate) {
-      return res.status(404).json({
-        status: false,
-        message: "Không tìm thấy người dùng"
-      });
+    const userId = req.user.id; // Lấy từ token, không lấy từ body
+    const { fcmToken } = req.body;
+    if (!fcmToken) {
+      return res.status(400).json({ status: false, message: "Thiếu fcmToken" });
     }
 
-    // Xóa token khỏi tất cả user khác (nếu có)
+    // Xoá token khỏi user khác
     await userModel.updateMany(
-      { _id: { $ne: id }, fcmTokens: fcmToken },
+      { _id: { $ne: userId }, fcmTokens: fcmToken },
       { $pull: { fcmTokens: fcmToken } }
     );
 
-    // Thêm token vào user hiện tại nếu chưa có
-    if (!itemUpdate.fcmTokens.includes(fcmToken)) {
-      itemUpdate.fcmTokens.push(fcmToken);
-      await itemUpdate.save();
-      return res.status(200).json({
-        status: true,
-        message: "Thêm FCM token thành công"
-      });
-    } else {
-      return res.status(200).json({
-        status: true,
-        message: "Token đã tồn tại"
-      });
+    // Giới hạn số lượng token
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "Không tìm thấy người dùng" });
+
+    let tokens = user.fcmTokens || [];
+    if (!tokens.includes(fcmToken)) {
+      tokens.push(fcmToken);
+      if (tokens.length > 5) tokens = tokens.slice(-5); // Giữ lại 5 token mới nhất
+      user.fcmTokens = tokens;
+      await user.save();
     }
+
+    await redis.set(`fcm:${userId}:${fcmToken}`, "1", "EX", 60 * 60 * 24 * 7);
+
+    return res.status(200).json({ status: true, message: "Cập nhật FCM token thành công" });
   } catch (e) {
-    res.status(400).json({
-      status: false,
-      message: "Lỗi: " + e
-    });
+    // Log lỗi chi tiết
+    console.error(e);
+    res.status(500).json({ status: false, message: "Lỗi server" });
   }
 });
+
 
 router.post('/send-notification', sendNotification);
 

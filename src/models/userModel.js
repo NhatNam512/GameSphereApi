@@ -1,29 +1,42 @@
 const mongoose = require("mongoose");
 const schema = mongoose.Schema;
-const oid = schema.ObjectId;
+
 const users = new schema({
-    id: { type: oid },
-    email: { type: String },
+    email: { type: String, required: true },
     password: { type: String },
     username: { type: String },
-    follower: { type: Number },
+    follower: { type: Number, default: 0 },
     picUrl: { type: String },
-    createAt: { type: Date, default: Date.now() },
-    updateAt: { type: Date, default: Date.now() },
-    tags: { type: [String] },
+    tags: [String],
     role: { type: Number },
     longitude: { type: Number },
     latitude: { type: Number },
-    location: {             // Geo location
-        type: { type: String, default: 'Point' },
-        coordinates: [Number] // [lng, lat]
+    location: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point'
+        },
+        coordinates: {
+            type: [Number],
+            index: '2dsphere'
+        }
     },
-    ticketsHave: { type: [oid], ref: "tickets" },
+    ticketsHave: [{ type: schema.Types.ObjectId, ref: "tickets" }],
     phoneNumber: { type: String },
     address: { type: String },
-    fcmTokens: { type: [] },
-    refreshToken: { type: String },
+    fcmTokens: [{ type: String }],
+    refreshToken: { type: String }
+}, {
+    timestamps: {
+        createdAt: 'createAt',
+        updatedAt: 'updateAt'
+    }
 });
-users.index({username: 1});
-users.index({email: 1});
+
+// Indexes
+users.index({ username: 1 });
+users.index({ email: 1 });
+users.index({ fcmTokens: 1 });
+
 module.exports = mongoose.model.users || mongoose.model("users", users);
