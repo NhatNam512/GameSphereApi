@@ -174,12 +174,10 @@ exports.acceptFriendRequest = async (req, res) => {
 
         const sender = await User.findById(request.senderId);
         if (sender?.fcmTokens?.length > 0) {
-            await notificationService.sendUserNotification(
-                sender.fcmTokens,
-                "Lời mời kết bạn",
-                `${username} đã chấp nhận lời mời kết bạn!`,
-                { avatar: req.user.picUrl },
-                "friend"
+            await notificationService.sendFriendAcceptNotification(
+                sender,
+                username,
+                req.user.picUrl
             );
         }
 

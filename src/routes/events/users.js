@@ -235,25 +235,31 @@ router.put("/fcmToken", async function (req, res) {
     const { id, fcmToken } = req.body;
     const itemUpdate = await userModel.findById(id);
 
-    if (itemUpdate) {
-      // Kiểm tra xem token đã tồn tại chưa
-      if (!itemUpdate.fcmTokens.includes(fcmToken)) {
-        itemUpdate.fcmTokens.push(fcmToken);
-        await itemUpdate.save();
-        res.status(200).json({
-          status: true,
-          message: "Thêm FCM token thành công"
-        });
-      } else {
-        res.status(200).json({
-          status: true,
-          message: "Token đã tồn tại"
-        });
-      }
-    } else {
-      res.status(404).json({
+    if (!itemUpdate) {
+      return res.status(404).json({
         status: false,
         message: "Không tìm thấy người dùng"
+      });
+    }
+
+    // Xóa token khỏi tất cả user khác (nếu có)
+    await userModel.updateMany(
+      { _id: { $ne: id }, fcmTokens: fcmToken },
+      { $pull: { fcmTokens: fcmToken } }
+    );
+
+    // Thêm token vào user hiện tại nếu chưa có
+    if (!itemUpdate.fcmTokens.includes(fcmToken)) {
+      itemUpdate.fcmTokens.push(fcmToken);
+      await itemUpdate.save();
+      return res.status(200).json({
+        status: true,
+        message: "Thêm FCM token thành công"
+      });
+    } else {
+      return res.status(200).json({
+        status: true,
+        message: "Token đã tồn tại"
       });
     }
   } catch (e) {
