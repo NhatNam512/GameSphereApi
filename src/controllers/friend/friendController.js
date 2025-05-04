@@ -84,8 +84,8 @@ exports.searchUsers = async (req, res) => {
 
         const result = users.map(user => {
             const fr = friendRequests.find(fr =>
-                (fr.senderId.toString() === userId && fr.receiverId.toString() === user._id.toString()) ||
-                (fr.senderId.toString() === user._id.toString() && fr.receiverId.toString() === userId)
+                (fr.senderId.toString() === userId.toString() && fr.receiverId.toString() === user._id.toString()) ||
+                (fr.senderId.toString() === user._id.toString() && fr.receiverId.toString() === userId.toString())
             );
             let relationshipStatus = 'none';
             let role = 'none';
