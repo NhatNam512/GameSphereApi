@@ -31,7 +31,6 @@ exports.validateFriendRequest = async (req, res, next) => {
 };
 
 exports.searchUsers = async (req, res) => {
-    const session = await mongoose.startSession();
     try {
         const searchTerm = req.query.searchTerm;
         if (!searchTerm || searchTerm.length < 2) {
@@ -46,8 +45,6 @@ exports.searchUsers = async (req, res) => {
             users = JSON.parse(users);
         } else {
             logger.info(`Cache miss for search term: ${searchTerm}`);
-            session.startTransaction();
-
             users = await User.aggregate([
                 {
                     $match: {
@@ -71,9 +68,7 @@ exports.searchUsers = async (req, res) => {
                     }
                 },
                 { $limit: 20 }
-            ]).session(session);
-
-            await session.commitTransaction();
+            ]).exec();
             // Only cache user info, not relationshipStatus
             await redisClient.setex(cacheKey, 3600, JSON.stringify(users));
         }
@@ -85,79 +80,78 @@ exports.searchUsers = async (req, res) => {
                 { senderId: userId, receiverId: { $in: userIds } },
                 { senderId: { $in: userIds }, receiverId: userId }
             ]
-        });
-        const statusMap = {};
+        }).lean();
 
-        friendRequests.forEach(fr => {
-            const sender = fr.senderId.toString();
-            const receiver = fr.receiverId.toString();
-            const otherId = sender === userId.toString() ? receiver : sender;
-            statusMap[otherId] = fr.status;
+        const result = users.map(user => {
+            const fr = friendRequests.find(fr =>
+                (fr.senderId.toString() === userId && fr.receiverId.toString() === user._id.toString()) ||
+                (fr.senderId.toString() === user._id.toString() && fr.receiverId.toString() === userId)
+            );
+            let relationshipStatus = 'none';
+            let role = 'none';
+            if (fr) {
+                relationshipStatus = fr.status;
+                if (fr.status === 'pending') {
+                    if (fr.senderId.toString() === userId) {
+                        role = 'sent'; // bạn là người gửi
+                    } else {
+                        role = 'received'; // bạn là người nhận
+                    }
+                } else if (fr.status === 'accepted') {
+                    role = 'friend';
+                }
+            }
+            return {
+                ...user,
+                relationshipStatus,
+                role
+            };
         });
-
-        const result = users.map(user => ({
-            ...user,
-            relationshipStatus: statusMap[user._id.toString()] || 'none'
-        }));
 
         logger.info(`Search completed for term: ${searchTerm}, found ${result.length} results`);
         return res.json(result);
 
     } catch (error) {
-        await session.abortTransaction();
         logger.error('Error in searchUsers:', { error: error.message });
         return res.status(500).json({ message: 'Internal Server Error' });
-    } finally {
-        session.endSession();
     }
 };
 
 exports.sendFriendRequest = async (req, res) => {
-    const session = await mongoose.startSession();
     try {
-        session.startTransaction();
-
         const senderId = req.user.id;
         const { receiverId } = req.body;
 
-        const receiver = await User.findById(receiverId).session(session);
+        // Kiểm tra người nhận có tồn tại không
+        const receiver = await User.findById(receiverId).lean();
         if (!receiver) {
-            await session.abortTransaction();
             return res.status(404).json({ message: "Người nhận không tồn tại." });
         }
 
+        // Kiểm tra đã có lời mời hoặc đã là bạn chưa
         const existing = await FriendRequest.findOne({
             $or: [
                 { senderId, receiverId },
                 { senderId: receiverId, receiverId: senderId }
             ]
-        }).session(session);
+        }).lean();
 
         if (existing) {
-            await session.abortTransaction();
             return res.status(400).json({ message: "Đã tồn tại lời mời hoặc đã là bạn." });
         }
 
-        const request = new FriendRequest({ senderId, receiverId });
-        await request.save({ session });
+        // Tạo lời mời kết bạn mới
+        const request = await FriendRequest.create({ senderId, receiverId });
 
-        try {
-            await notificationService.sendFriendRequestNotification(receiver);
-        } catch (notiErr) {
-            await session.abortTransaction();
-            logger.error('Notification failed:', notiErr);
-            return res.status(500).json({ message: 'Không thể gửi thông báo.' });
-        }
+        // Gửi notification (không rollback nếu lỗi)
+        notificationService.sendFriendRequestNotification(receiver)
+            .catch(notiErr => logger.error('Notification failed:', notiErr));
 
-        await session.commitTransaction();
         logger.info(`Friend request sent from ${senderId} to ${receiverId}`);
         return res.status(200).json({ message: "Gửi lời mời thành công.", request });
     } catch (error) {
-        await session.abortTransaction();
         logger.error('Error in sendFriendRequest:', error);
         return res.status(500).json({ message: "Internal Server Error" });
-    } finally {
-        session.endSession();
     }
 };
 
@@ -167,7 +161,7 @@ exports.acceptFriendRequest = async (req, res) => {
         const userId = req.user.id;
         const username = req.user.username;
 
-        const request = await FriendRequest.findById(requestId);
+        const request = await FriendRequest.findById(requestId).lean();
         if (!request || request.receiverId.toString() !== userId.toString()) {
             return res.status(404).json({ message: "Lời mời không hợp lệ hoặc không tồn tại." });
         }
@@ -176,13 +170,11 @@ exports.acceptFriendRequest = async (req, res) => {
             return res.status(400).json({ message: "Lời mời đã được chấp nhận trước đó." });
         }
 
-        request.status = "accepted";
+        await FriendRequest.findByIdAndUpdate(requestId, { status: 'accepted' });
         const [uid1, uid2] = [request.senderId.toString(), request.receiverId.toString()].sort();
         await friendshipModel.create({ user1: uid1, user2: uid2 });
 
-        await request.save();
-
-        const sender = await User.findById(request.senderId);
+        const sender = await User.findById(request.senderId).lean();
         if (sender?.fcmTokens?.length > 0) {
             await notificationService.sendFriendAcceptNotification(
                 sender,
@@ -194,7 +186,7 @@ exports.acceptFriendRequest = async (req, res) => {
         await redisClient.del(`friendList:${userId}`);
         await redisClient.del(`friendList:${request.senderId}`);
 
-        return res.status(200).json({ message: "Đã chấp nhận lời mời kết bạn.", request });
+        return res.status(200).json({ message: "Đã chấp nhận lời mời kết bạn.", request: { ...request, status: 'accepted' } });
     } catch (error) {
         logger.error("Error in acceptFriendRequest:", error);
         return res.status(500).json({ message: "Internal Server Error" });
@@ -206,15 +198,14 @@ exports.declineFriendRequest = async (req, res) => {
         const { requestId } = req.params;
         const userId = req.user.id;
 
-        const request = await FriendRequest.findById(requestId);
+        const request = await FriendRequest.findById(requestId).lean();
         if (!request || request.receiverId.toString() !== userId.toString()) {
             return res.status(404).json({ message: "Lời mời không hợp lệ hoặc không tồn tại." });
         }
 
-        request.status = "declined";
-        await request.save();
+        await FriendRequest.findByIdAndUpdate(requestId, { status: 'declined' });
 
-        return res.status(200).json({ message: "Đã từ chối lời mời kết bạn.", request });
+        return res.status(200).json({ message: "Đã từ chối lời mời kết bạn.", request: { ...request, status: 'declined' } });
     } catch (error) {
         logger.error("Error in declineFriendRequest:", error);
         return res.status(500).json({ message: "Internal Server Error" });
@@ -229,7 +220,8 @@ exports.getPendingRequests = async (req, res) => {
             status: 'pending'
         })
             .populate('senderId', 'username email name picUrl')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
 
         return res.status(200).json({ requests });
     } catch (error) {
@@ -275,7 +267,7 @@ exports.unfriend = async (req, res) => {
         const { friendId } = req.params;
 
         const [uid1, uid2] = [userId, friendId].sort();
-        const result = await friendshipModel.findOneAndDelete({ user1: uid1, user2: uid2 });
+        const result = await friendshipModel.findOneAndDelete({ user1: uid1, user2: uid2 }).lean();
 
         if (!result) {
             return res.status(404).json({ message: "Không tìm thấy quan hệ bạn bè." });
@@ -296,6 +288,7 @@ exports.unfriend = async (req, res) => {
         return res.status(500).json({ message: "Internal Server Error" });
     }
 };
+
 exports.checkFriendship = async (req, res) => {
     const userId = req.user.id;
     const { otherUserId } = req.params;
