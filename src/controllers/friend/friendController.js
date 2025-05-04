@@ -92,7 +92,7 @@ exports.searchUsers = async (req, res) => {
             if (fr) {
                 relationshipStatus = fr.status;
                 if (fr.status === 'pending') {
-                    if (fr.senderId.toString() === userId) {
+                    if (fr.senderId.toString() === userId.toString()) {
                         role = 'sent'; // bạn là người gửi
                     } else {
                         role = 'received'; // bạn là người nhận
