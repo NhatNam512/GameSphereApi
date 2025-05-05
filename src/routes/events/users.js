@@ -11,6 +11,7 @@ const sgMail = require("@sendgrid/mail");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { sendNotification } = require('../../controllers/auth/sendNotification');
 const authenticate = require('../../middlewares/auth');
+const Event = require("../../models/events/eventModel");
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -41,7 +42,8 @@ router.post("/login", async function (req, res) {
         email: checkUser.email,
         role: checkUser.role,
         tags: checkUser.tags,
-        location: checkUser.location
+        location: checkUser.location,
+        role: checkUser.role
       };
 
       const token = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1h" });
@@ -57,7 +59,8 @@ router.post("/login", async function (req, res) {
           email: checkUser.email,
           token,
           refreshToken,
-          fcmTokens: checkUser.fcmTokens || []
+          fcmTokens: checkUser.fcmTokens || [],
+          role: checkUser.role
         }
       });
     }
@@ -69,7 +72,7 @@ router.post("/login", async function (req, res) {
 // Register
 router.post("/register", async function (req, res) {
   try {
-    const { email, password, username, phoneNumber } = req.body;
+    const { email, password, username, phoneNumber, role} = req.body;
     // Check if user already exists
     const existingUser = await userModel.findOne({ email: email });
     if (existingUser) {
@@ -86,7 +89,14 @@ router.post("/register", async function (req, res) {
 
     // Lưu tạm thông tin đăng ký
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userData = JSON.stringify({ email, password: hashedPassword, username, phoneNumber });
+    const userData = JSON.stringify({ 
+      email, 
+      password: hashedPassword, 
+      username, 
+      phoneNumber, 
+      picUrl: "https://avatar.iran.liara.run/public",
+      role: role ? role : 3 
+    });
     await redis.set(`pending-user:${email}`, userData, "EX", 600);
 
     // Gửi email
@@ -308,6 +318,28 @@ router.post('/getNotification', async function (req, res) {
     })
   } catch (e) {
     return res.status(401).json({ message: 'Error: ' + e });
+  }
+});
+
+router.get("/eventOfOrganization", async function (req, res) {
+  try {
+    const { userId } = req.body;
+    const events = await Event.find({ userId: userId })
+      .populate("_id name timeStart timeEnd ticketPrice soldTickets ticketQuantity avatar ");
+    let totalTickets = 0;
+    let totalRevenue = 0;
+    events.forEach(event => {
+      totalTickets += event.soldTickets || 0;
+      totalRevenue += (event.soldTickets || 0) * (event.ticketPrice || 0);
+    });
+    res.status(200).json({
+      status: 200,
+      totalTickets: totalTickets,
+      totalRevenue: totalRevenue,
+      events: events
+    });
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error" + e });
   }
 });
 
