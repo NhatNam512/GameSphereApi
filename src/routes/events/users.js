@@ -136,7 +136,7 @@ router.post("/verify-otp", async (req, res) => {
   if (existingUser) return res.status(400).json({ message: "Email đã tồn tại" });
 
   // Tạo tài khoản
-  const newUser = new userModel({ ...userData, role: 3 });
+  const newUser = new userModel({ ...userData });
   await newUser.save();
 
   // Xoá Redis
