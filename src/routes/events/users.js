@@ -12,6 +12,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { sendNotification } = require('../../controllers/auth/sendNotification');
 const authenticate = require('../../middlewares/auth');
 const Event = require("../../models/events/eventModel");
+const forgotPasswordController = require('../../controllers/auth/forgotPasswordController');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -342,6 +343,9 @@ router.get("/eventOfOrganization", async function (req, res) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
 });
+
+router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
+router.post('/forgotPassword/verify', forgotPasswordController.verifyForgotPassword);
 
 module.exports = router;
 

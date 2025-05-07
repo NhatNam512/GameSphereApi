@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const logger = require('../../utils/logger');
 const friendshipModel = require('../../models/user/friendshipModel');
+const { getSocketIO } = require('../../../socket/socket');
 
 // Rate limiting middleware
 exports.friendRequestLimiter = rateLimit({
@@ -147,6 +148,15 @@ exports.sendFriendRequest = async (req, res) => {
         notificationService.sendFriendRequestNotification(receiver)
             .catch(notiErr => logger.error('Notification failed:', notiErr));
 
+        try {
+            const io = getSocketIO();
+            io.to(receiverId).emit('friendRequest', { 
+                from: senderId,
+                requestId: request._id, 
+            });
+        } catch (socketErr) {
+            logger.error('Socket emit friendRequest failed:', socketErr);
+        }
         logger.info(`Friend request sent from ${senderId} to ${receiverId}`);
         return res.status(200).json({ message: "Gửi lời mời thành công.", request });
     } catch (error) {
