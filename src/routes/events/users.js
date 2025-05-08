@@ -347,5 +347,18 @@ router.get("/eventOfOrganization", async function (req, res) {
 router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
 router.post('/forgotPassword/verify', forgotPasswordController.verifyForgotPassword);
 
+router.put('/addTag', async function (req, res) {
+  try {
+    const { userId, tag } = req.body;
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "Không tìm thấy người dùng" });
+    user.tags.push(tag);
+    await user.save();
+    res.status(200).json({ status: true, message: "Successfully" });
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error" + e });
+  }
+});
+
 module.exports = router;
 

@@ -11,7 +11,6 @@ const friendshipSchema = new mongoose.Schema({
 
 // Đảm bảo không trùng lặp cặp bạn bè
 friendshipSchema.index({ user1: 1, user2: 1 }, { unique: true });
-friendshipSchema.index({ user2: 1, user1: 1 }, { unique: true });
 // Tối ưu truy vấn
 friendshipSchema.index({ user1: 1 });
 friendshipSchema.index({ user2: 1 });

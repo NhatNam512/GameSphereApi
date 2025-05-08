@@ -81,7 +81,7 @@ exports.searchUsers = async (req, res) => {
                 { senderId: userId, receiverId: { $in: userIds } },
                 { senderId: { $in: userIds }, receiverId: userId }
             ]
-        }).lean();
+        }).select('senderId receiverId status').lean();
 
         const result = users.map(user => {
             const fr = friendRequests.find(fr =>
@@ -124,7 +124,7 @@ exports.sendFriendRequest = async (req, res) => {
         const { receiverId } = req.body;
 
         // Kiểm tra người nhận có tồn tại không
-        const receiver = await User.findById(receiverId).lean();
+        const receiver = await User.findById(receiverId).select('_id fcmTokens').lean();
         if (!receiver) {
             return res.status(404).json({ message: "Người nhận không tồn tại." });
         }
@@ -135,7 +135,7 @@ exports.sendFriendRequest = async (req, res) => {
                 { senderId, receiverId },
                 { senderId: receiverId, receiverId: senderId }
             ]
-        }).lean();
+        }).select('_id status').lean();
 
         if (existing) {
             return res.status(400).json({ message: "Đã tồn tại lời mời hoặc đã là bạn." });
@@ -184,7 +184,7 @@ exports.acceptFriendRequest = async (req, res) => {
         const [uid1, uid2] = [request.senderId.toString(), request.receiverId.toString()].sort();
         await friendshipModel.create({ user1: uid1, user2: uid2 });
 
-        const sender = await User.findById(request.senderId).lean();
+        const sender = await User.findById(request.senderId).select('_id fcmTokens').lean();
         if (sender?.fcmTokens?.length > 0) {
             await notificationService.sendFriendAcceptNotification(
                 sender,
@@ -193,8 +193,10 @@ exports.acceptFriendRequest = async (req, res) => {
             );
         }
 
-        await redisClient.del(`friendList:${userId}`);
-        await redisClient.del(`friendList:${request.senderId}`);
+        await Promise.all([
+            redisClient.del(`friendList:${userId}`),
+            redisClient.del(`friendList:${request.senderId}`)
+        ]);
 
         return res.status(200).json({ message: "Đã chấp nhận lời mời kết bạn.", request: { ...request, status: 'accepted' } });
     } catch (error) {
@@ -208,7 +210,7 @@ exports.declineFriendRequest = async (req, res) => {
         const { requestId } = req.params;
         const userId = req.user.id;
 
-        const request = await FriendRequest.findById(requestId).lean();
+        const request = await FriendRequest.findById(requestId).select('receiverId status').lean();
         if (!request || request.receiverId.toString() !== userId.toString()) {
             return res.status(404).json({ message: "Lời mời không hợp lệ hoặc không tồn tại." });
         }
@@ -231,6 +233,7 @@ exports.getPendingRequests = async (req, res) => {
         })
             .populate('senderId', 'username email name picUrl')
             .sort({ createdAt: -1 })
+            .select('senderId status createdAt')
             .lean();
 
         return res.status(200).json({ requests });
@@ -255,7 +258,10 @@ exports.getFriendsList = async (req, res) => {
                 { user1: userId },
                 { user2: userId }
             ]
-        }).populate('user1 user2', 'username picUrl');
+        })
+        .populate('user1 user2', 'username picUrl')
+        .select('user1 user2')
+        .lean();
 
         const friends = friendships.map(f => {
             const u1 = f.user1._id.toString();
@@ -283,14 +289,16 @@ exports.unfriend = async (req, res) => {
             return res.status(404).json({ message: "Không tìm thấy quan hệ bạn bè." });
         }
 
-        await redisClient.del(`friendList:${userId}`);
-        await redisClient.del(`friendList:${friendId}`);
-        await FriendRequest.deleteMany({
-            $or: [
-                { senderId: userId, receiverId: friendId },
-                { senderId: friendId, receiverId: userId }
-            ]
-        });
+        await Promise.all([
+            redisClient.del(`friendList:${userId}`),
+            redisClient.del(`friendList:${friendId}`),
+            FriendRequest.deleteMany({
+                $or: [
+                    { senderId: userId, receiverId: friendId },
+                    { senderId: friendId, receiverId: userId }
+                ]
+            })
+        ]);
 
         return res.status(200).json({ message: "Đã huỷ kết bạn." });
     } catch (error) {

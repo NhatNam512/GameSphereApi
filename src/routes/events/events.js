@@ -120,6 +120,11 @@ router.get("/detail/:id", async function (req, res, next) {
       error.statusCode = 404;
       throw error;
     }
+    // Map location_map -> longitude/latitude if available
+    if (detail.location_map && detail.location_map.coordinates) {
+      detail.longitude = detail.location_map.coordinates[0];
+      detail.latitude = detail.location_map.coordinates[1];
+    }
 
     await redis.set(cacheKey, JSON.stringify(detail), 'EX', 300);
     return res.status(200).json({
