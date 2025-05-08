@@ -215,9 +215,9 @@ exports.declineFriendRequest = async (req, res) => {
             return res.status(404).json({ message: "Lời mời không hợp lệ hoặc không tồn tại." });
         }
 
-        await FriendRequest.findByIdAndUpdate(requestId, { status: 'declined' });
+        await FriendRequest.deleteOne({_id: requestId})
 
-        return res.status(200).json({ message: "Đã từ chối lời mời kết bạn.", request: { ...request, status: 'declined' } });
+        return res.status(200).json({ message: "Đã từ chối lời mời kết bạn."});
     } catch (error) {
         logger.error("Error in declineFriendRequest:", error);
         return res.status(500).json({ message: "Internal Server Error" });

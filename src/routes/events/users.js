@@ -346,17 +346,32 @@ router.get("/eventOfOrganization", async function (req, res) {
 
 router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
 router.post('/forgotPassword/verify', forgotPasswordController.verifyForgotPassword);
-
 router.put('/addTag', async function (req, res) {
   try {
-    const { userId, tag } = req.body;
+    const { userId, tag } = req.body;  // tag là mảng chứa các tag cần thêm
+
+    // Kiểm tra xem userId và tag có được gửi không và tag phải là mảng
+    if (!userId || !tag || !Array.isArray(tag)) {
+      return res.status(400).json({ status: false, message: "Thiếu thông tin userId hoặc tag (tag phải là mảng)" });
+    }
+
+    // Tìm người dùng trong cơ sở dữ liệu
     const user = await userModel.findById(userId);
-    if (!user) return res.status(404).json({ status: false, message: "Không tìm thấy người dùng" });
-    user.tags.push(tag);
+    if (!user) {
+      return res.status(404).json({ status: false, message: "Không tìm thấy người dùng" });
+    }
+
+    // Kết hợp các tag mới với tag hiện tại của người dùng và loại bỏ tag trùng lặp
+    const updatedTags = [...new Set([...user.tags, ...tag])];  // Loại bỏ các tag trùng lặp
+
+    // Cập nhật mảng tags cho người dùng
+    user.tags = updatedTags;
     await user.save();
-    res.status(200).json({ status: true, message: "Successfully" });
+
+    res.status(200).json({ status: true, message: "Tags đã được thêm thành công" });
   } catch (e) {
-    res.status(400).json({ status: false, message: "Error" + e });
+    console.error('Error adding tags:', e);  // Log lỗi chi tiết
+    res.status(500).json({ status: false, message: `Lỗi server: ${e.message}` });
   }
 });
 
