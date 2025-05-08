@@ -28,6 +28,23 @@ class NotificationService {
             "friend"
         );
     }
+
+    async sendInviteFriendNotification(invitee, inviter, eventName, avatar, eventId) {
+        const tokens = invitee?.fcmTokens || [];
+        if (tokens.length === 0) return;
+
+        return sendUserNotification(
+            tokens,
+            "Lời mời tham gia sự kiện",
+            `${inviter.username} đã mời bạn tham gia sự kiện ${eventName}`,
+            { 
+                avatar, 
+                eventName,
+                eventId,
+            },
+            "event"
+        );
+    }
 }
 
 module.exports = new NotificationService();
