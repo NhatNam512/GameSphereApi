@@ -11,4 +11,4 @@ const inviteFriendSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.models.friendships || mongoose.model('friendships', friendshipSchema);
+module.exports = mongoose.models.friendships || mongoose.model('friendships', inviteFriendSchema);
