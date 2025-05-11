@@ -10,6 +10,7 @@ const QRCode = require('qrcode');
 const Counter = require('../../models/events/counterModel')
 const shortid = require('shortid');
 const { sendUserNotification } = require('../../controllers/auth/sendNotification');
+const notificationService = require('../../services/notificationService');
 
 router.get("/getOrders", async function (req, res) {
     try {
@@ -133,19 +134,7 @@ router.post("/createTicket", async (req, res) => {
         ]);
 
         // Gửi notify nếu có token
-        if (user.fcmTokens && user.fcmTokens.length > 0) {
-            await sendUserNotification(
-                user.fcmTokens,
-                "Đặt vé thành công",
-                `Bạn đã đặt ${order.amount} vé cho sự kiện "${event.name}"`,
-                {
-                    ticketId: ticket.ticketId,
-                    eventId: event._id.toString(),
-                    type: "ticket"
-                },
-                "ticket"
-            );
-        }
+        await notificationService.sendTicketNotification(user, event.name, event.avatar, event._id);
 
         return res.status(200).json({ success: true, data: ticket });
 

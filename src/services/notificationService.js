@@ -45,6 +45,21 @@ class NotificationService {
             "invite"
         );
     }
+
+    async sendTicketNotification(user, eventName, avatar, eventId) {
+        const tokens = user?.fcmTokens || [];
+        if (tokens.length === 0) return;
+
+        return sendUserNotification(
+            tokens,
+            "Đặt vé thành công",
+            `Bạn đã đặt ${order.amount} vé cho sự kiện "${eventName}"`,
+            {
+                eventId: eventId,
+            },
+            "ticket"
+        );
+    }
 }
 
 module.exports = new NotificationService();
