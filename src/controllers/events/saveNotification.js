@@ -1,8 +1,8 @@
 const { getSocketIO } = require('../../../socket/socket');
 const Notification = require('../../models/events/notificationModel');
 const User = require('../../models/userModel');
-
-async function saveNotifications(fcmToken, title, body, data = {}) {
+const crypto = require('crypto');
+async function saveNotifications(fcmToken, title, body, data = {}, type) {
   try {
     // Tìm user theo FCM token
     const user = await User.findOne({ fcmTokens: fcmToken });
@@ -10,19 +10,29 @@ async function saveNotifications(fcmToken, title, body, data = {}) {
       console.log('⚠️ Không tìm thấy user với FCM Token này.');
       return;
     }
-
+    const hash = crypto.createHash('md5').update(`${title}-${body}-${type}`).digest('hex');
+    const isDuplicate = await Notification.findOne({
+      user: user._id,
+      uniqueHash: hash,
+      createdAt: { $gte: new Date(Date.now() - 1000 * 60 * 1) }// trong 1 phút gần nhất
+    });
+    if (isDuplicate) {
+      console.log('Trùng thông báo, không lưu lại.');
+      return;
+    }
     // Tạo notification mới
     const newNoti = new Notification({
       user: user._id,
-      title,
-      body,
-      data,
+      title: title || 'Thông báo',
+      body: body,
+      data: data ,
       createdAt: new Date(),
       isRead: false,
+      type: type
     });
 
     await newNoti.save();
-    console.log('✅ Notification saved to database');
+    console.log('Notification saved to database');
 
     // Gửi socket tới đúng user
     const io = getSocketIO();
@@ -32,7 +42,7 @@ async function saveNotifications(fcmToken, title, body, data = {}) {
     });
 
   } catch (error) {
-    console.error('❌ Error save notification:', error.message); 
+    console.error('Error save notification:', error.message);
   }
 }
 

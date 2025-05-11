@@ -42,7 +42,7 @@ class NotificationService {
                 eventName,
                 eventId,
             },
-            "event"
+            "invite"
         );
     }
 }
