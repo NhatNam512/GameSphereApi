@@ -29,7 +29,7 @@ class NotificationService {
         );
     }
 
-    async sendInviteFriendNotification(invitee, inviter, eventName, avatar, eventId) {
+    async sendInviteFriendNotification(invitee, inviter, eventName, avatar, eventId, inviteId) {
         const tokens = invitee?.fcmTokens || [];
         if (tokens.length === 0) return;
 
@@ -41,6 +41,7 @@ class NotificationService {
                 avatar, 
                 eventName,
                 eventId,
+                inviteId
             },
             "invite"
         );

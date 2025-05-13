@@ -10,6 +10,7 @@ const notificationSchema = new schema({
         avatar: { type: String }, // URL ảnh đại diện người mời
         eventName: { type: String },
         eventId: { type: oid, ref: "events" },
+        inviteId: { type: oid, ref: 'eventinvitations'}
     },
     isRead: {type: Boolean, default: false},
     createdAt: {

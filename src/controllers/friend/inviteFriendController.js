@@ -5,53 +5,60 @@ const userModel = require("../../models/userModel");
 const notificationService = require("../../services/notificationService");
 
 exports.inviteFriendsToEvent = async (req, res) => {
-    try {
-      const { eventId, userIds } = req.body;
-      const inviterId = req.user.id;
-  
-      if (!Array.isArray(userIds) || userIds.length === 0) {
-        return res.status(400).json({ message: 'Danh sách người được mời không hợp lệ.' });
-      }
-  
-      const event = await eventModel.findById(eventId);
-      if (!event) {
-        return res.status(404).json({ message: 'Sự kiện không tồn tại.' });
-      }
-  
-      const invitations = [];
-      for (const userId of userIds) {
-        invitations.push({
-          eventId,
-          inviterId,
-          inviteeId: userId,
-          status: 'pending',
-        });
-  
-        try {
-          const invitee = await userModel.findById(userId).select('fcmTokens username');
-          if (invitee) {
-            await notificationService.sendInviteFriendNotification(
-              invitee,
-              req.user,
-              event.name,
-              req.user.picUrl,
-              eventId
-            );
-          }
-        } catch (notificationErr) {
-          console.warn(`Lỗi gửi thông báo tới ${userId}:`, notificationErr);
-          // Có thể log vào DB hoặc gửi alert nội bộ nếu cần
-        }
-      }
-  
-      await inviteFriendModel.insertMany(invitations);
-  
-      return res.status(200).json({ message: 'Đã mời bạn bè thành công.' });
-    } catch (err) {
-      console.error('Error inviting friends:', err);
-      return res.status(500).json({ message: 'Lỗi hệ thống.' });
+  try {
+    const { eventId, userIds } = req.body;
+    const inviterId = req.user.id;
+
+    // Kiểm tra danh sách người mời hợp lệ
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ message: 'Danh sách người được mời không hợp lệ.' });
     }
-  };
+
+    // Kiểm tra sự kiện có tồn tại không
+    const event = await eventModel.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Sự kiện không tồn tại.' });
+    }
+
+    // Tạo danh sách lời mời
+    const invitations = userIds.map(userId => ({
+      eventId,
+      inviterId,
+      inviteeId: userId,
+      status: 'pending',
+    }));
+
+    // Insert tất cả lời mời vào DB cùng lúc
+    await inviteFriendModel.insertMany(invitations);
+
+    // Sau khi insert thành công, gửi thông báo cho tất cả người được mời
+    for (const userId of userIds) {
+      try {
+        const invitee = await userModel.findById(userId).select('fcmTokens username');
+        if (invitee) {
+          const invitation = invitations.find(inv => inv.inviteeId.toString() === userId.toString());
+          await notificationService.sendInviteFriendNotification(
+            invitee,
+            req.user,
+            event.name,
+            req.user.picUrl,
+            eventId,
+            invitation._id
+          );
+        }
+      } catch (notificationErr) {
+        console.warn(`Lỗi gửi thông báo tới ${userId}:`, notificationErr);
+        // Có thể log vào DB hoặc gửi alert nội bộ nếu cần
+      }
+    }
+
+    // Trả về phản hồi thành công
+    return res.status(200).json({ message: 'Đã mời bạn bè thành công.' });
+  } catch (err) {
+    console.error('Error inviting friends:', err);
+    return res.status(500).json({ message: 'Lỗi hệ thống.' });
+  }
+};
 
 exports.acceptInviteToEvent = async (req, res) => {
     try {
