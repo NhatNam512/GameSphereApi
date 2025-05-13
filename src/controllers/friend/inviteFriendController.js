@@ -64,7 +64,7 @@ exports.acceptInviteToEvent = async (req, res) => {
         const userId = req.user.id;
 
         const invite = await inviteFriendModel.findById(inviteId);
-        if (!invite || invite.inviteeId.toString() !== userId) {
+        if (!invite || invite.inviteeId.toString() !== userId.toString()) {
             return res.status(404).json({ message: 'Lời mời không tồn tại hoặc không hợp lệ.' });
         }
 
@@ -87,7 +87,7 @@ exports.declineInviteToEvent = async (req, res) => {
         const userId = req.user.id;
 
         const invite = await inviteFriendModel.findById(inviteId);
-        if (!invite || invite.inviteeId.toString() !== userId) {
+        if (!invite || invite.inviteeId.toString() !== userId.toString()) {
             return res.status(404).json({ message: 'Lời mời không tồn tại hoặc không hợp lệ.' });
         }
 
