@@ -1,4 +1,5 @@
 const { sendUserNotification } = require("../controllers/auth/sendNotification");
+const inviteFriendModel = require("../models/user/inviteFriendModel");
 
 class NotificationService {
     async sendFriendRequestNotification(receiver, data = {}) {
@@ -32,6 +33,8 @@ class NotificationService {
     async sendInviteFriendNotification(invitee, inviter, eventName, avatar, eventId, inviteId) {
         const tokens = invitee?.fcmTokens || [];
         if (tokens.length === 0) return;
+        const invite = await inviteFriendModel.findById(inviteId).lean();
+        if (!invite) return;
 
         return sendUserNotification(
             tokens,
@@ -41,7 +44,8 @@ class NotificationService {
                 avatar, 
                 eventName,
                 eventId,
-                inviteId
+                inviteId,
+                status: invite.status
             },
             "invite"
         );
