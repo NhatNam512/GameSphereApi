@@ -253,15 +253,14 @@ router.put("/fcmToken", authenticate, async (req, res) => {
 
     // Xoá token khỏi các user khác (tránh trùng)
     await userModel.updateMany(
-      { _id: { $ne: userId }, fcmToken },
-      { $unset: { fcmToken: "" } }
+      { _id: { $ne: userId }, fcmTokens: fcmToken },
+      { $unset: { fcmTokens: "" } }
     );
 
     // Cập nhật fcmToken mới cho user
     const user = await userModel.findByIdAndUpdate(
       userId,
-      { fcmToken },
-      { new: true }
+      { fcmTokens: fcmToken },
     );
 
     if (!user) {
