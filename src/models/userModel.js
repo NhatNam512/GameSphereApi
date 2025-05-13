@@ -25,7 +25,7 @@ const users = new schema({
     ticketsHave: [{ type: schema.Types.ObjectId, ref: "tickets" }],
     phoneNumber: { type: String },
     address: { type: String },
-    fcmTokens: [{ type: String }],
+    fcmTokens: { type: String },
     refreshToken: { type: String }
 }, {
     timestamps: {

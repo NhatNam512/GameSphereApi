@@ -10,7 +10,7 @@ async function saveNotifications(fcmToken, title, body, data = {}, type) {
       console.log('⚠️ Không tìm thấy user với FCM Token này.');
       return;
     }
-    const hash = crypto.createHash('md5').update(`${title}-${body}-${type}`).digest('hex');
+    const hash = crypto.createHash('md5').update(`${user._id}-${title}-${body}-${type}`).digest('hex');
     const isDuplicate = await Notification.findOne({
       user: user._id,
       uniqueHash: hash,

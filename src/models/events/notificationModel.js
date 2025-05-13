@@ -16,7 +16,8 @@ const notificationSchema = new schema({
         type: Date,
         default: Date.now
       },
-    type: {type: String}
+    type: {type: String},
+    uniqueHash: { type: String, index: true }
 });
 
 module.exports = mongoose.models.notifications || mongoose.model("notifications", notificationSchema);

@@ -240,44 +240,43 @@ router.get("/:id", async function (req, res) {
   } catch (e) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
-})
+});
 
 router.put("/fcmToken", authenticate, async (req, res) => {
   try {
-    const userId = req.user.id; // Lấy từ token, không lấy từ body
+    const userId = req.user.id;
     const { fcmToken } = req.body;
+
     if (!fcmToken) {
       return res.status(400).json({ status: false, message: "Thiếu fcmToken" });
     }
 
-    // Xoá token khỏi user khác
+    // Xoá token khỏi các user khác (tránh trùng)
     await userModel.updateMany(
-      { _id: { $ne: userId }, fcmTokens: fcmToken },
-      { $pull: { fcmTokens: fcmToken } }
+      { _id: { $ne: userId }, fcmToken },
+      { $unset: { fcmToken: "" } }
     );
 
-    // Giới hạn số lượng token
-    const user = await userModel.findById(userId);
-    if (!user) return res.status(404).json({ status: false, message: "Không tìm thấy người dùng" });
+    // Cập nhật fcmToken mới cho user
+    const user = await userModel.findByIdAndUpdate(
+      userId,
+      { fcmToken },
+      { new: true }
+    );
 
-    let tokens = user.fcmTokens || [];
-    if (!tokens.includes(fcmToken)) {
-      tokens.push(fcmToken);
-      if (tokens.length > 5) tokens = tokens.slice(-5); // Giữ lại 5 token mới nhất
-      user.fcmTokens = tokens;
-      await user.save();
+    if (!user) {
+      return res.status(404).json({ status: false, message: "Không tìm thấy người dùng" });
     }
 
-    await redis.set(`fcm:${userId}:${fcmToken}`, "1", "EX", 60 * 60 * 24 * 7);
+    // Lưu token vào Redis (tuỳ bạn muốn sử dụng để làm gì)
+    await redis.set(`fcm:${userId}`, fcmToken, "EX", 60 * 60 * 24 * 7); // 7 ngày
 
     return res.status(200).json({ status: true, message: "Cập nhật FCM token thành công" });
   } catch (e) {
-    // Log lỗi chi tiết
     console.error(e);
     res.status(500).json({ status: false, message: "Lỗi server" });
   }
 });
-
 
 router.post('/send-notification', sendNotification);
 
