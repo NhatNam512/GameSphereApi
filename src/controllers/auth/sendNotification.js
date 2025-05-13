@@ -27,10 +27,21 @@ exports.sendNotification = async (req, res) => {
 // Gửi thông báo cho nhiều người dùng
 exports.sendUserNotification = async (fcmTokens, title, body, data = {}, type) => {
   try {
+    // Nếu chỉ là chuỗi đơn thì chuyển thành mảng 1 phần tử
+    if (typeof fcmTokens === 'string') {
+      fcmTokens = [fcmTokens];
+    }
+
     if (!Array.isArray(fcmTokens) || fcmTokens.length === 0) return;
 
-    const tasks = fcmTokens.map(token => sendNotificationCore(token, title, body, data, type));
-    await Promise.all(tasks);
+    if (fcmTokens.length === 1) {
+      await sendNotificationCore(fcmTokens[0], title, body, data, type);
+    } else {
+      const tasks = fcmTokens.map(token =>
+        sendNotificationCore(token, title, body, data, type)
+      );
+      await Promise.all(tasks);
+    }
   } catch (e) {
     console.error("❌ Lỗi khi gửi thông báo đến user:", e.message);
     throw e;
