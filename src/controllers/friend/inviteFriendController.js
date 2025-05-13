@@ -29,26 +29,24 @@ exports.inviteFriendsToEvent = async (req, res) => {
     }));
 
     // Insert tất cả lời mời vào DB cùng lúc
-    await inviteFriendModel.insertMany(invitations);
+    const insertedInvitations = await inviteFriendModel.insertMany(invitations);
 
     // Sau khi insert thành công, gửi thông báo cho tất cả người được mời
-    for (const userId of userIds) {
+    for (const inserted of insertedInvitations) {
       try {
-        const invitee = await userModel.findById(userId).select('fcmTokens username');
+        const invitee = await userModel.findById(inserted.inviteeId).select('fcmTokens username');
         if (invitee) {
-          const invitation = invitations.find(inv => inv.inviteeId.toString() === userId.toString());
           await notificationService.sendInviteFriendNotification(
             invitee,
             req.user,
             event.name,
             req.user.picUrl,
             eventId,
-            invitation._id
+            inserted._id // <-- Đảm bảo đúng _id
           );
         }
       } catch (notificationErr) {
-        console.warn(`Lỗi gửi thông báo tới ${userId}:`, notificationErr);
-        // Có thể log vào DB hoặc gửi alert nội bộ nếu cần
+        console.warn(`Lỗi gửi thông báo tới ${inserted.inviteeId}:`, notificationErr);
       }
     }
 
