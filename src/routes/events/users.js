@@ -13,6 +13,7 @@ const { sendNotification } = require('../../controllers/auth/sendNotification');
 const authenticate = require('../../middlewares/auth');
 const Event = require("../../models/events/eventModel");
 const forgotPasswordController = require('../../controllers/auth/forgotPasswordController');
+const { getEvents } = require('../../controllers/organizer/getEvents');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -220,26 +221,6 @@ router.put("/editPassword", async function (req, res) {
   } catch (e) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
-})
-
-router.get("/:id", async function (req, res) {
-  try {
-    const { id } = req.params;
-    var detail = await userModel.findById(id);
-
-    if (detail) {
-      res.status(200).json({
-        status: true,
-        message: "Lấy người thành công",
-        data: detail
-      });
-    }
-    else {
-      res.status(404).json({ status: true, message: "Not Found" })
-    }
-  } catch (e) {
-    res.status(400).json({ status: false, message: "Error" + e });
-  }
 });
 
 router.put("/fcmToken", authenticate, async (req, res) => {
@@ -320,27 +301,7 @@ router.post('/getNotification', async function (req, res) {
   }
 });
 
-router.get("/eventOfOrganization", async function (req, res) {
-  try {
-    const { userId } = req.body;
-    const events = await Event.find({ userId: userId })
-      .populate("_id name timeStart timeEnd ticketPrice soldTickets ticketQuantity avatar ");
-    let totalTickets = 0;
-    let totalRevenue = 0;
-    events.forEach(event => {
-      totalTickets += event.soldTickets || 0;
-      totalRevenue += (event.soldTickets || 0) * (event.ticketPrice || 0);
-    });
-    res.status(200).json({
-      status: 200,
-      totalTickets: totalTickets,
-      totalRevenue: totalRevenue,
-      events: events
-    });
-  } catch (e) {
-    res.status(400).json({ status: false, message: "Error" + e });
-  }
-});
+router.get("/eventOfOrganization", authenticate, getEvents);
 
 router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
 router.post('/forgotPassword/verify', forgotPasswordController.verifyForgotPassword);
@@ -372,6 +333,24 @@ router.put('/addTag', async function (req, res) {
     res.status(500).json({ status: false, message: `Lỗi server: ${e.message}` });
   }
 });
+router.get("/getUser/:id", async function (req, res) {
+  try {
+    const { id } = req.params;
+    var detail = await userModel.findById(id);
 
+    if (detail) {
+      res.status(200).json({
+        status: true,
+        message: "Lấy người dùng thành công",
+        data: detail
+      });
+    }
+    else {
+      res.status(404).json({ status: true, message: "Not Found" })
+    }
+  } catch (e) {
+    res.status(400).json({ status: false, message: "Error" + e });
+  }
+});
 module.exports = router;
 

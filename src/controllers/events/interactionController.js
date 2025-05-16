@@ -4,7 +4,8 @@ const redis = require('../../redis/redisClient');
 
 exports.createInteraction = async (req, res) => {
     try {
-        const { userId, eventId, type } = req.body;
+        const userId = req.user.id;
+        const { eventId, type } = req.body;
         const SCORE_MAP = { view: 1, like: 2, join: 3, rate: 2, share: 3 };
         const value = SCORE_MAP[type] || 1;
 
@@ -35,7 +36,6 @@ exports.createInteraction = async (req, res) => {
             }
         }
 
-        // ✅ Push dữ liệu vào Redis Stream (realtime tracking)
         await redis.xAdd('event_view', '*', {
             userId,
             eventId,
