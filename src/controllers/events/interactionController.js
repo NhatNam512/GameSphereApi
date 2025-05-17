@@ -45,22 +45,65 @@ exports.createInteraction = async (req, res) => {
             timestamp: new Date().toISOString()
         });
 
-        res.status(isNew ? 201 : 200).json({ message: isNew ? 'Interaction saved' : 'Interaction updated', interaction });
+        res.status(200).json({ message: isNew ? 'Interaction saved' : 'Interaction updated', interaction });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
-exports.getTopViewedEvents = async (req, res) => {
+exports.getEventTotalScores = async (req, res) => {
     const fromDate = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
     const limit = parseInt(req.query.limit) || 10;
 
     const result = await Interaction.aggregate([
-        { $match: { type: 'view', date: { $gte: fromDate } } },
-        { $group: { _id: '$eventId', totalViews: { $sum: '$value' } } },
-        { $sort: { totalViews: -1 } },
-        { $limit: limit }
+        { $match: { date: { $gte: fromDate } } },
+        {
+            $group: {
+                _id: '$eventId',
+                totalScore: { $sum: '$value' }
+            }
+        },
+        {
+            $addFields: {
+                eventIdObj: {
+                    $convert: {
+                        input: '$_id',
+                        to: 'objectId',
+                        onError: null,
+                        onNull: null
+                    }
+                }
+            }
+        },
+        {
+            $lookup: {
+                from: 'events',
+                localField: 'eventIdObj',
+                foreignField: '_id',
+                as: 'event'
+            }
+        },
+        { $unwind: '$event' },
+        { $sort: { totalScore: -1 } },
+        { $limit: limit },
+        {
+            $project: {
+                _id: 0,
+                eventId: '$_id',
+                totalScore: 1,
+                name: '$event.name',
+                timeStart: '$event.timeStart',
+                timeEnd: '$event.timeEnd',
+                avatar: '$event.avatar',
+                categories: '$event.categories',
+                tags: '$event.tags',
+                ticketPrice: '$event.ticketPrice',
+                ticketQuantity: '$event.ticketQuantity',
+            }
+        }
     ]);
 
     res.json(result);
 };
+
+

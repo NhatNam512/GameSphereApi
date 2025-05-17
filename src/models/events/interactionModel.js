@@ -12,7 +12,7 @@ const interactionSchema = schema({
     },
     value: { type: Number, required: true },
     createdAt: { type: Date, default: Date.now },
-    date: { type: String, required: true }
+    date: { type: String }
 });
 // Index để truy vấn nhanh
 interactionSchema.index({ userId: 1 });

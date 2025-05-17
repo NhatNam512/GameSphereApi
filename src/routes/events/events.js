@@ -9,6 +9,7 @@ const { eventSchema, eventTagsSchema } = require('../../validations/eventValidat
 const authenticate = require('../../middlewares/auth');
 const { getRecommendedEvents } = require('../../controllers/events/recommendedEvents');
 const { addTagsToEvent } = require('../../controllers/events/tagController');
+const { getTopViewedEvents } = require('../../controllers/events/interactionController');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
