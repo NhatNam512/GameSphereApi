@@ -29,6 +29,36 @@ exports.joinEvent = async (req, res) => {
 
   return res.status(200).json({ message: 'Tham gia sự kiện thành công.' });
 };
+
+exports.unjoinEvent = async (req, res) => {
+  const userId = req.user.id;
+  const { eventId } = req.params;
+
+  try {
+    // Kiểm tra người dùng đã tham gia chưa
+    const joinedRecord = await inviteFriendModel.findOne({
+      eventId,
+      inviteeId: userId,
+      status: 'joined'
+    });
+
+    if (!joinedRecord) {
+      return res.status(400).json({ message: 'Bạn chưa tham gia sự kiện này.' });
+    }
+
+    // Xóa bản ghi hoặc cập nhật trạng thái
+    await inviteFriendModel.deleteOne({ _id: joinedRecord._id });
+
+    // Hoặc nếu muốn giữ lại log thì:
+    // await inviteFriendModel.updateOne({ _id: joinedRecord._id }, { status: 'cancelled' });
+
+    return res.status(200).json({ message: 'Bạn đã rời khỏi sự kiện.' });
+  } catch (error) {
+    console.error('Error in unjoinEvent:', error);
+    return res.status(500).json({ message: 'Có lỗi xảy ra khi rời sự kiện.' });
+  }
+};
+
 exports.inviteFriendsToEvent = async (req, res) => {
   try {
     const { eventId, userIds } = req.body;
