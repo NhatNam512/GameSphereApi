@@ -11,6 +11,7 @@ const recommendRouter = require('./events/recommendation');
 const usersRouter = require('./events/users');
 const interactionRouter = require('./events/interactions');
 const friendRouter = require('./users/friends');
+const zoneRouter = require('./events/zones');
 
 var gamesRouter = require('./games/games');
 var categoriesGamesRouter = require('./games/categoriesGames');
@@ -29,5 +30,6 @@ router.use("/categories_games", categoriesGamesRouter);
 router.use("/previewGame", previewGameRouter);
 router.use("/interactions", interactionRouter);
 router.use("/friends", friendRouter);
+router.use("/zones", zoneRouter);
 
 module.exports = router;
