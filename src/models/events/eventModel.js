@@ -37,6 +37,8 @@ const events = new schema({
         }, // [lng, lat]
     },
     userId: { type: oid, ref: "users" },
+
+    hasSeats: { type: Boolean, default: false },
     
     embedding: { type: [Number] }
 });

@@ -12,6 +12,9 @@ const ticket = new schema({
     ticketType: {type: String},
     amount: {type: Number},
     price: {type: Number},
+    seat: {
+        seatId: { type: String }  // Ví dụ: "A1"
+    },
     type: {type: String},
     createdAt: { type: Date, default: Date.now }, 
     status: { type: String, enum: ["issued", "used"], default: "issued" },

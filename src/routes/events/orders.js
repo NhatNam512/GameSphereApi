@@ -11,6 +11,7 @@ const Counter = require('../../models/events/counterModel')
 const shortid = require('shortid');
 const { sendUserNotification } = require('../../controllers/auth/sendNotification');
 const notificationService = require('../../services/notificationService');
+const redisClient = require('../../redis/redisClient');
 
 router.get("/getOrders", async function (req, res) {
     try {
@@ -24,25 +25,25 @@ router.get("/getOrders", async function (req, res) {
             data: orders
         });
     } catch (e) {
-        return res.status(500).json({ success: false, message: "Lấy đơn hàng thất bại" + e});
+        return res.status(500).json({ success: false, message: "Lấy đơn hàng thất bại" + e });
     }
 });
 
 router.post("/createOrder", async function (req, res) {
     try {
-        const { userId, eventId, amount } = req.body;
+        const { userId, eventId, amount, seats } = req.body;
         if (!userId || !eventId || !amount || amount < 1) {
             return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc số lượng vé không hợp lệ." });
         }
-
         // Kiểm tra sự kiện còn vé không
         const event = await Event.findById(eventId);
         if (!event || event.soldTickets + amount > event.ticketQuantity) {
             return res.status(400).json({ success: false, message: "Không đủ vé." });
         }
+        // Remove Redis seat lock check and setting
 
         // Tạo đơn hàng
-        const newOrder = { userId, eventId, amount, status: "pending" };
+        const newOrder = { userId, eventId, amount, seats, status: "pending" }; // Keep status as pending initially
         const createdOrder = await orderModel.create(newOrder);
 
         res.status(200).json({
@@ -72,7 +73,6 @@ router.post("/createTicket", async (req, res) => {
             return res.status(400).json({ success: false, message: "Thiếu thông tin bắt buộc." });
         }
 
-        // Tìm đơn hàng
         const order = await orderModel.findById(orderId);
         if (!order) {
             return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng." });
@@ -81,16 +81,36 @@ router.post("/createTicket", async (req, res) => {
         const user = await User.findById(order.userId);
         const event = await Event.findById(order.eventId);
 
-        // Kiểm tra đơn hàng và sự kiện
         if (!event) {
             return res.status(404).json({ success: false, message: "Không tìm thấy sự kiện." });
         }
 
         if (order.status !== "pending") {
-            return res.status(400).json({ success: false, message: "Đơn hàng đã được thanh toán hoặc hủy." });
+            return res.status(400).json({ success: false, message: "Đơn hàng đã được xử lý." });
         }
 
+        // Kiểm tra Redis lock
+        for (const seat of order.seats) {
+            const redisKey = `seatLock:${order.eventId}:${seat.seatId}`;
+            const lockedBy = await redisClient.get(redisKey);
+            console.log("Key: ", lockedBy);
+            if (!lockedBy) {
+                for (const s of order.seats) {
+                    await redisClient.del(`seatLock:${order.eventId}:${s.seatId}`);
+                }
+                if (!lockedBy) {
+                    await orderModel.updateOne({ _id: orderId }, { status: "cancelled" });
+                }
+                return res.status(400).json({ success: false, message: `Ghế ${seat.seatId} không còn khả dụng.` });
+            }
+        }
+
+        // Kiểm tra số vé tồn
         if (event.soldTickets + order.amount > event.ticketQuantity) {
+            for (const seat of order.seats) {
+                await redisClient.del(`seatLock:${order.eventId}:${seat.seatId}`);
+            }
+            await orderModel.updateOne({ _id: orderId }, { status: "cancelled" });
             return res.status(400).json({ success: false, message: "Không đủ vé." });
         }
 
@@ -99,49 +119,71 @@ router.post("/createTicket", async (req, res) => {
             { _id: orderId, status: "pending" },
             { $set: { status: "paid" } }
         );
+
         if (updatedOrder.modifiedCount === 0) {
-            return res.status(400).json({ success: false, message: "Đơn hàng đã bị thay đổi trạng thái trước đó." });
+            const finalOrder = await orderModel.findById(orderId);
+            for (const seat of order.seats) {
+                await redisClient.del(`seatLock:${order.eventId}:${seat.seatId}`);
+            }
+            return res.status(400).json({
+                success: false,
+                message: `Đơn hàng đã xử lý bởi tiến trình khác (${finalOrder.status}).`
+            });
         }
 
-        // Sinh ticketNumber và ticketId
-        const ticketNumber = await generateTicketNumber();
-        const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+        // Tạo vé cho từng ghế
+        const createdTickets = [];
 
-        // Tạo QR code
-        const qrCodeData = `TicketID: ${ticketId}`;
-        const qrCode = await QRCode.toDataURL(qrCodeData);
+        for (const seat of order.seats) {
+            const ticketNumber = await generateTicketNumber();
+            const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+            const qrCodeData = `TicketID: ${ticketId}`;
+            const qrCode = await QRCode.toDataURL(qrCodeData);
 
-        // Tạo vé
-        const ticket = new Ticket({
-            orderId: order._id,
-            userId: order.userId,
-            eventId: order.eventId,
-            qrCode: qrCode,
-            ticketId: ticketId,
-            ticketNumber: ticketNumber,
-            amount: order.amount,
-            status: "issued",
-            createdAt: new Date(),
-        });
+            const ticket = new Ticket({
+                orderId: order._id,
+                userId: order.userId,
+                eventId: order.eventId,
+                qrCode,
+                ticketId,
+                ticketNumber,
+                amount: 1,
+                status: "issued",
+                createdAt: new Date(),
+                seat: {
+                    seatId: seat.seatId
+                }
+            });
 
-        // Lưu vé và cập nhật soldTickets đồng thời
-        await Promise.all([
-            ticket.save(),
-            Event.updateOne(
-                { _id: event._id, soldTickets: { $lte: event.ticketQuantity - order.amount } },
-                { $inc: { soldTickets: order.amount } }
-            )
-        ]);
+            await ticket.save();
+            createdTickets.push(ticket);
+        }
 
-        // Gửi notify nếu có token
+        // Cập nhật số vé đã bán
+        await Event.updateOne(
+            { _id: event._id, soldTickets: { $lte: event.ticketQuantity - order.amount } },
+            { $inc: { soldTickets: order.amount } }
+        );
+
+        // Xóa Redis lock
+        for (const seat of order.seats) {
+            await redisClient.del(`seatLock:${order.eventId}:${seat.seatId}`);
+        }
+
+        // Gửi thông báo
         await notificationService.sendTicketNotification(user, event.name, event.avatar, event._id);
 
-        return res.status(200).json({ success: true, data: ticket });
+        return res.status(200).json({ success: true, data: createdTickets });
 
     } catch (e) {
         console.error(e);
+        if (order && order.seats) {
+            for (const seat of order.seats) {
+                await redisClient.del(`seatLock:${order.eventId}:${seat.seatId}`);
+            }
+        }
         if (e.code === 11000) {
-            return res.status(400).json({ success: false, message: "Vui lòng thử lại, số vé đã bị trùng." });
+            return res.status(400).json({ success: false, message: "Trùng vé. Vui lòng thử lại." });
         }
         return res.status(500).json({ success: false, message: "Lỗi khi tạo vé." });
     }

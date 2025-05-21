@@ -11,7 +11,7 @@ const recommendRouter = require('./events/recommendation');
 const usersRouter = require('./events/users');
 const interactionRouter = require('./events/interactions');
 const friendRouter = require('./users/friends');
-const zoneRouter = require('./events/zones');
+const zoneRouter = require('./events/seats');
 
 var gamesRouter = require('./games/games');
 var categoriesGamesRouter = require('./games/categoriesGames');
