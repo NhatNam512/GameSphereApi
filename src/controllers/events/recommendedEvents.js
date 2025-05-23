@@ -65,6 +65,11 @@ exports.getRecommendedEvents = async (req, res) => {
     const tagSet = new Set();
     topEvents.forEach(ev => ev.tags?.forEach(tag => tagSet.add(tag)));
 
+    // Thêm tags của user vào tập hợp tags
+    if (user.tags?.length) {
+      user.tags.forEach(tag => tagSet.add(tag));
+    }
+
     const seenEventIds = interactions.map(i => i.eventId);
 
     const recommended = await Event.find({

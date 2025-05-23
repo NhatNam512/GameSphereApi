@@ -341,4 +341,16 @@ router.post('/add-tags', validate(eventTagsSchema), addTagsToEvent);
 
 router.get('/getZone/:id', getZones);
 
+router.put('/add-zone', async function (req, res) {
+  try {
+    const {eventId, zoneId} = req.body;
+    const event = await eventModel.findById(eventId);
+    event.zone = zoneId;
+    await event.save();
+    res.status(200).json({ status: true, message: "Successfully updated" });
+  } catch (error) {
+    res.status(400).json({ status: true, message: "Failure" });
+  }
+})
+
 module.exports = router;

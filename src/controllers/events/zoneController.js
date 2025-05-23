@@ -22,7 +22,7 @@ exports.createZone = async (req, res) => {
       updatedBy: userId,
     })
     await zone.save();
-    res.status(200).json({message: "Tạo vùng thành công.", zone});
+    res.status(200).json({message: "Tạo vùng thành công.", zoneId: zone._id,});
   } catch (error) {
     res.status(500).json({error: error.message});
   }
