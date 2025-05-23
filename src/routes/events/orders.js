@@ -12,6 +12,7 @@ const shortid = require('shortid');
 const { sendUserNotification } = require('../../controllers/auth/sendNotification');
 const notificationService = require('../../services/notificationService');
 const redisClient = require('../../redis/redisClient');
+const seatModel = require('../../models/events/seatModel');
 
 router.get("/getOrders", async function (req, res) {
     try {
@@ -67,13 +68,14 @@ const generateTicketNumber = async () => {
 };
 
 router.post("/createTicket", async (req, res) => {
+    let order; // Khai báo biến order ở đây
     try {
         const { orderId, paymentId } = req.body;
         if (!orderId || !paymentId) {
             return res.status(400).json({ success: false, message: "Thiếu thông tin bắt buộc." });
         }
 
-        const order = await orderModel.findById(orderId);
+        order = await orderModel.findById(orderId);
         if (!order) {
             return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng." });
         }
@@ -172,6 +174,16 @@ router.post("/createTicket", async (req, res) => {
 
         // Gửi thông báo
         await notificationService.sendTicketNotification(user, event.name, event.avatar, event._id);
+
+        // Cập nhật trạng thái các ghế trong seatModel thành 'booked'
+        // Tạo một mục nhập mới trong seatModel cho đơn hàng đã thanh toán
+        await seatModel.create({
+            eventId: order.eventId,
+            userId: order.userId,
+            seats: order.seats, // Lưu thông tin ghế từ đơn hàng
+            totalPrice: order.totalPrice, // Giả định orderModel có totalPrice
+            status: 'booked' // Đặt trạng thái là booked
+        });
 
         return res.status(200).json({ success: true, data: createdTickets });
 

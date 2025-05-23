@@ -10,6 +10,7 @@ const authenticate = require('../../middlewares/auth');
 const { getRecommendedEvents } = require('../../controllers/events/recommendedEvents');
 const { addTagsToEvent } = require('../../controllers/events/tagController');
 const { getTopViewedEvents } = require('../../controllers/events/interactionController');
+const { getZones } = require('../../controllers/events/zoneController');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -176,6 +177,7 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
       rating, 
       userId,
       tags,
+      zone,
       location_map: {
         type: "Point",
         coordinates: [longitude, latitude] // đúng chuẩn GeoJSON
@@ -206,7 +208,7 @@ router.put("/edit", async function (req, res) {
       id, name, description, timeStart, timeEnd,
       avatar, images, categories, banner,
       location, ticketPrice, ticketQuantity,
-      rating, longitude, latitude
+      rating, longitude, latitude, zone
     } = req.body;
 
     const itemUpdate = await eventModel.findById(id);
@@ -228,6 +230,7 @@ router.put("/edit", async function (req, res) {
     if (ticketQuantity) itemUpdate.ticketQuantity = ticketQuantity;
     if (rating) itemUpdate.rating = rating;
     if (location) itemUpdate.location = location; // locationName là tên hiển thị
+    if (zone) itemUpdate.zone = zone;
 
     // Cập nhật tọa độ nếu có
     if (longitude && latitude) {
@@ -329,5 +332,7 @@ router.post("/sort", async function (req, res) {
 router.get("/for-you", authenticate, getRecommendedEvents);
 
 router.post('/add-tags', validate(eventTagsSchema), addTagsToEvent);
+
+router.get('/getZone/:id', getZones);
 
 module.exports = router;

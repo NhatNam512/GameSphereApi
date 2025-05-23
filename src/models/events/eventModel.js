@@ -39,6 +39,8 @@ const events = new schema({
     userId: { type: oid, ref: "users" },
 
     hasSeats: { type: Boolean, default: false },
+
+    zone: { type: oid, ref: 'zones' },
     
     embedding: { type: [Number] }
 });

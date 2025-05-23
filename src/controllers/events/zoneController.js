@@ -1,87 +1,176 @@
 const { getSocketIO } = require("../../../socket/socket");
-const zoneModel = require("../../models/events/seatModel");
+const eventModel = require("../../models/events/eventModel");
+const seatModel = require("../../models/events/seatModel");
+const zoneModel = require("../../models/events/zoneModel");
 const redisClient = require("../../redis/redisClient");
-exports.blockSeats = async (req, res) => {
-    try {
-        const { eventId } = req.query;
-        const bookings = await zoneModel.find({ eventId, status: 'booked' });
-        const blockedSeats = bookings.flatMap(b => b.seats.map(s => s.seatId));
-        res.status(200).json({
-            eventId,
-            blockedSeats
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+
+exports.createZone = async (req, res) => {
+  try {
+    const {userId} = req.user.id;
+    const {name, rows, cols, seats} = req.body;
+    if( !rows || !cols || !seats) {
+      return res.status(400).json({message: "Thiếu thông tin tạo vùng."});
     }
+    const zone = await zoneModel.create({
+      name,
+      layout: {
+        rows: rows,
+        cols: cols,
+        seats: seats
+      },
+      createdBy: userId,
+      updatedBy: userId,
+    })
+    await zone.save();
+    res.status(200).json({message: "Tạo vùng thành công.", zone});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+}
+
+exports.getZones = async (req, res)=>{
+  try {
+    // Lấy eventId từ req.params.id theo định nghĩa route /getZone/:id
+    const eventId = req.params.id;
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Thiếu eventId trong params." });
+    }
+
+    // Tìm event bằng eventId và populate trường zone
+    const event = await eventModel.findById(eventId).populate('zone');
+
+    if (!event || !event.zone) {
+      // Trả về mảng rỗng nếu không tìm thấy event hoặc event chưa có zone được liên kết
+      return res.status(200).json({ message: "Sự kiện chưa có sơ đồ chỗ ngồi hoặc zone không tồn tại.", zones: [] });
+    }
+
+    // Lấy thông tin zone từ event đã populate
+    const zone = event.zone;
+
+    // Lấy các ghế đã đặt thành công từ SeatBooking model cho sự kiện này
+    const bookedBookings = await seatModel.find({ eventId: eventId, status: 'booked' });
+    const bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+
+    // Lấy các ghế đang giữ tạm thời từ Redis cho sự kiện này
+    let reservedSeatIds = [];
+    let cursor = '0';
+    do {
+      const reply = await redisClient.scan(cursor, 'MATCH', `gamesphere:seatLock:${eventId}:*`);
+      cursor = reply[0];
+      const keys = reply[1];
+      keys.forEach(key => {
+        const parts = key.split(':');
+        if (parts.length === 3) {
+          reservedSeatIds.push(parts[2]); // Lấy seatId từ key (seatLock:eventId:seatId)
+        }
+      });
+    } while (cursor !== '0');
+
+    // Kết hợp thông tin zone layout với trạng thái ghế
+    const seatsWithStatus = zone.layout.seats.map(seat => {
+      let status = 'available';
+      if (bookedSeatIds.includes(seat.seatId)) {
+        status = 'booked';
+      } else if (reservedSeatIds.includes(seat.seatId)) {
+        status = 'reserved';
+      }
+      // Trả về đối tượng ghế với trường status được cập nhật
+      return { ...seat.toObject(), status };
+    });
+
+    // Trả về đối tượng zone đã cập nhật trạng thái ghế, bọc trong mảng để nhất quán với API có thể có nhiều zones sau này
+    const zoneWithStatus = { ...zone.toObject(), layout: { ...zone.layout.toObject(), seats: seatsWithStatus } };
+
+    res.status(200).json({ message: "Lấy sơ đồ chỗ ngồi thành công.", zones: [zoneWithStatus] });
+
+  } catch (error) {
+    console.error("Lỗi khi lấy sơ đồ chỗ ngồi:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+exports.blockSeats = async (req, res) => {
+  try {
+    const { eventId } = req.query;
+    const bookings = await seatModel.find({ eventId, status: 'booked' });
+    const blockedSeats = bookings.flatMap(b => b.seats.map(s => s.seatId));
+    res.status(200).json({
+      eventId,
+      blockedSeats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 }
 
 exports.seat = async (req, res) => {
-    try {
-        const userId = req.user.id
-        const { eventId, seats, totalPrice } = req.body;
-        if (!eventId || !userId || !totalPrice || !Array.isArray(seats) || seats.length === 0) {
-            return res.status(400).json({ message: 'Thiếu thông tin đặt ghế.' });
-        }
-        const seatIds = seats.map(s => s.seatId);
-        const conflict = await zoneModel.findOne({
-            eventId,
-            'seats.seatId': { $in: seatIds },
-            status: 'booked',
-        });
-        const booking = new zoneModel({
-            eventId,
-            userId,
-            seats,
-            totalPrice,
-        });
-        if (conflict) {
-            return res.status(400).json({ message: 'Một số ghế đã được đặt.' });
-        }
-        await booking.save();
-
-        res.status(200).json({ message: 'Đặt ghế thành công.', booking });
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+  try {
+    const userId = req.user.id
+    const { eventId, seats, totalPrice } = req.body;
+    if (!eventId || !userId || !totalPrice || !Array.isArray(seats) || seats.length === 0) {
+      return res.status(400).json({ message: 'Thiếu thông tin đặt ghế.' });
     }
+    const seatIds = seats.map(s => s.seatId);
+    const conflict = await seatModel.findOne({
+      eventId,
+      'seats.seatId': { $in: seatIds },
+      status: 'booked',
+    });
+    const booking = new zoneModel({
+      eventId,
+      userId,
+      seats,
+      totalPrice,
+    });
+    if (conflict) {
+      return res.status(400).json({ message: 'Một số ghế đã được đặt.' });
+    }
+    await booking.save();
+
+    res.status(200).json({ message: 'Đặt ghế thành công.', booking });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 }
 
 exports.reserveSeats = async (req, res) => {
-    const { eventId, seats } = req.body;
-    const userId = req.user.id;
-  
-    if (!eventId || !Array.isArray(seats) || seats.length === 0) {
-      return res.status(400).json({ message: "Thiếu thông tin giữ ghế." });
+  const { eventId, seats } = req.body;
+  const userId = req.user.id;
+
+  if (!eventId || !Array.isArray(seats) || seats.length === 0) {
+    return res.status(400).json({ message: "Thiếu thông tin giữ ghế." });
+  }
+
+  const failedSeats = [];
+
+  for (const seat of seats) {
+    const key = `seatLock:${eventId}:${seat.seatId}`;
+    const result = await redisClient.set(key, userId, 'NX', 'EX', 600);
+    if (result !== 'OK') {
+      failedSeats.push(seat.seatId);
     }
-  
-    const failedSeats = [];
-  
-    for (const seat of seats) {
-      const key = `seatLock:${eventId}:${seat.seatId}`;
-      const result = await redisClient.set(key, userId, 'NX', 'EX', 600);
-      if (result !== 'OK') {
-        failedSeats.push(seat.seatId);
-      }
+  }
+
+  if (failedSeats.length > 0) {
+    // Giải phóng các ghế đã giữ trước đó nếu 1 cái bị fail
+    for (const seatId of seats) {
+      await redisClient.del(`seatLock:${eventId}:${seatId}`);
     }
-  
-    if (failedSeats.length > 0) {
-      // Giải phóng các ghế đã giữ trước đó nếu 1 cái bị fail
-      for (const seatId of seats) {
-        await redisClient.del(`seatLock:${eventId}:${seatId}`);
-      }
-      return res.status(409).json({
-        message: "Một số ghế đã bị người khác giữ.",
-        failedSeats,
-      });
-    }
-  
-    // Emit socket đến room sự kiện để cập nhật ghế đã giữ
-    const io = getSocketIO();
-    io.to(`event_${eventId}`).emit('seat_reserved', {
-      seats,
-      userId,
-      expiresIn: 600,
+    return res.status(409).json({
+      message: "Một số ghế đã bị người khác giữ.",
+      failedSeats,
     });
-  
-    return res.status(200).json({ message: "Giữ ghế thành công.", expiresIn: 600 });
-  };
+  }
+
+  // Emit socket đến room sự kiện để cập nhật ghế đã giữ
+  const io = getSocketIO();
+  io.to(`event_${eventId}`).emit('seat_reserved', {
+    seats,
+    userId,
+    expiresIn: 600,
+  });
+
+  return res.status(200).json({ message: "Giữ ghế thành công.", expiresIn: 600 });
+};
