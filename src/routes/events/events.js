@@ -241,6 +241,12 @@ router.put("/edit", async function (req, res) {
     }
 
     await itemUpdate.save();
+
+    // Xóa cache để cập nhật dữ liệu mới
+    await redis.del(`events_detail_${id}`); // Xóa cache chi tiết sự kiện
+    await redis.del("events"); // Xóa cache danh sách tất cả sự kiện
+    await redis.del("events_home"); // Xóa cache danh sách sự kiện trang chủ
+
     res.status(200).json({ status: true, message: "Successfully updated" });
 
   } catch (e) {

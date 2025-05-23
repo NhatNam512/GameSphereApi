@@ -13,6 +13,7 @@ const { sendUserNotification } = require('../../controllers/auth/sendNotificatio
 const notificationService = require('../../services/notificationService');
 const redisClient = require('../../redis/redisClient');
 const seatModel = require('../../models/events/seatModel');
+const getSocketIO = require('../../../socket/socket');
 
 router.get("/getOrders", async function (req, res) {
     try {
@@ -185,13 +186,28 @@ router.post("/createTicket", async (req, res) => {
             status: 'booked' // Đặt trạng thái là booked
         });
 
+        // Lấy instance Socket.IO và emit sự kiện seat_booked
+        const io = getSocketIO();
+        io.to(`event_${order.eventId}`).emit('seat_booked', {
+            eventId: order.eventId,
+            seats: order.seats.map(s => ({ seatId: s.seatId, status: 'booked' })) // Chỉ gửi seatId và trạng thái
+        });
+
         return res.status(200).json({ success: true, data: createdTickets });
 
     } catch (e) {
         console.error(e);
         if (order && order.seats) {
             for (const seat of order.seats) {
+                // Xóa Redis lock
                 await redisClient.del(`seatLock:${order.eventId}:${seat.seatId}`);
+
+                // Emit sự kiện seat_released nếu đơn hàng bị hủy/lỗi sau khi khóa đã được đặt
+                const io = getSocketIO();
+                io.to(`event_${order.eventId}`).emit('seat_released', {
+                    eventId: order.eventId,
+                    seats: [{ seatId: seat.seatId, status: 'available' }]
+                });
             }
         }
         if (e.code === 11000) {
