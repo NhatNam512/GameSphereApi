@@ -13,7 +13,7 @@ const { sendUserNotification } = require('../../controllers/auth/sendNotificatio
 const notificationService = require('../../services/notificationService');
 const redisClient = require('../../redis/redisClient');
 const seatModel = require('../../models/events/seatModel');
-const getSocketIO = require('../../../socket/socket');
+const { getSocketIO } = require('../../../socket/socket');
 
 router.get("/getOrders", async function (req, res) {
     try {
