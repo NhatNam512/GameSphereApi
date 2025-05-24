@@ -97,12 +97,6 @@ router.post("/createTicket", async (req, res) => {
             const redisKey = `seatLock:${order.eventId}:${seat.seatId}`;
             const lockedBy = await redisClient.get(redisKey);
             console.log(`Seat ${seat.seatId} locked by:`, lockedBy);
-        
-            // Nếu có Redis lock và không phải của đơn hàng này → báo lỗi
-            if (lockedBy && lockedBy !== orderId.toString()) {
-                return res.status(400).json({ success: false, message: `Ghế ${seat.seatId} đang bị giữ bởi đơn hàng khác.` });
-            }
-        
             // Nếu không có Redis lock thì bỏ qua, tiếp tục
         }
 
@@ -132,29 +126,59 @@ router.post("/createTicket", async (req, res) => {
             });
         }
 
-        // Tạo vé cho từng ghế
+        // Tạo vé
         const createdTickets = [];
-        for (let i = 0; i < order.amount; i++) {
-            const ticketNumber = await generateTicketNumber();
-            const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
-            const qrCodeData = `TicketID: ${ticketId}`;
-            const qrCode = await QRCode.toDataURL(qrCodeData);
-        
-            const ticket = new Ticket({
-                orderId: order._id,
-                userId: order.userId,
-                eventId: order.eventId,
-                qrCode,
-                ticketId,
-                ticketNumber,
-                amount: 1,
-                status: "issued",
-                createdAt: new Date(),
-                // Không có seat nếu không cần
-            });
-        
-            await ticket.save();
-            createdTickets.push(ticket);
+
+        if (order.seats && order.seats.length > 0) {
+            // Tạo vé cho từng ghế nếu có ghế
+            for (const seat of order.seats) {
+                const ticketNumber = await generateTicketNumber();
+                const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+                const qrCodeData = `TicketID: ${ticketId}`;
+                const qrCode = await QRCode.toDataURL(qrCodeData);
+
+                const ticket = new Ticket({
+                    orderId: order._id,
+                    userId: order.userId,
+                    eventId: order.eventId,
+                    qrCode,
+                    ticketId,
+                    ticketNumber,
+                    amount: 1, // Mỗi vé cho 1 ghế
+                    status: "issued",
+                    createdAt: new Date(),
+                    seat: {
+                        seatId: seat.seatId
+                    }
+                });
+
+                await ticket.save();
+                createdTickets.push(ticket);
+            }
+        } else {
+            // Tạo vé dựa trên số lượng nếu không có ghế
+            for (let i = 0; i < order.amount; i++) {
+                const ticketNumber = await generateTicketNumber();
+                const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+                const qrCodeData = `TicketID: ${ticketId}`;
+                const qrCode = await QRCode.toDataURL(qrCodeData);
+
+                const ticket = new Ticket({
+                    orderId: order._id,
+                    userId: order.userId,
+                    eventId: order.eventId,
+                    qrCode,
+                    ticketId,
+                    ticketNumber,
+                    amount: 1, // Mỗi lần lặp tạo 1 vé
+                    status: "issued",
+                    createdAt: new Date(),
+                    // Không thêm thông tin seat
+                });
+
+                await ticket.save();
+                createdTickets.push(ticket);
+            }
         }
 
         // Cập nhật số vé đã bán
