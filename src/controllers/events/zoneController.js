@@ -90,51 +90,6 @@ exports.getZones = async (req, res)=>{
   }
 }
 
-exports.blockSeats = async (req, res) => {
-  try {
-    const { eventId } = req.query;
-    const bookings = await seatModel.find({ eventId, status: 'booked' });
-    const blockedSeats = bookings.flatMap(b => b.seats.map(s => s.seatId));
-    res.status(200).json({
-      eventId,
-      blockedSeats
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}
-
-exports.seat = async (req, res) => {
-  try {
-    const userId = req.user.id
-    const { eventId, seats, totalPrice } = req.body;
-    if (!eventId || !userId || !totalPrice || !Array.isArray(seats) || seats.length === 0) {
-      return res.status(400).json({ message: 'Thiếu thông tin đặt ghế.' });
-    }
-    const seatIds = seats.map(s => s.seatId);
-    const conflict = await seatModel.findOne({
-      eventId,
-      'seats.seatId': { $in: seatIds },
-      status: 'booked',
-    });
-    const booking = new zoneModel({
-      eventId,
-      userId,
-      seats,
-      totalPrice,
-    });
-    if (conflict) {
-      return res.status(400).json({ message: 'Một số ghế đã được đặt.' });
-    }
-    await booking.save();
-
-    res.status(200).json({ message: 'Đặt ghế thành công.', booking });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}
-
 exports.reserveSeats = async (req, res) => {
   const { eventId, seats } = req.body;
   const userId = req.user.id;
