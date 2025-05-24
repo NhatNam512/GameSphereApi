@@ -61,8 +61,8 @@ exports.getZones = async (req, res)=>{
       const keys = reply[1];
       keys.forEach(key => {
         const parts = key.split(':');
-        if (parts.length === 3) {
-          reservedSeatIds.push(parts[2]); // Lấy seatId từ key (seatLock:eventId:seatId)
+        if (parts.length === 4 && parts[0] === 'gamesphere' && parts[1] === 'seatLock' && parts[2] === eventId) {
+          reservedSeatIds.push(parts[3]); // Lấy seatId từ phần thứ 4
         }
       });
     } while (cursor !== '0');
