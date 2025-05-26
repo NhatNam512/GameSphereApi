@@ -160,7 +160,7 @@ router.get("/categories/:id", async function (req,  res) {
 
 router.post("/add", validate(eventSchema), async function (req, res, next) {
   try {
-    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId, tags } = req.body;
+    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId, tags, zone } = req.body;
     
     const newItem = await eventModel.create({ 
       name, 
@@ -177,7 +177,8 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
       rating, 
       userId,
       tags,
-      zone,
+      zone: zone ? zone : null,
+      hasSeats: zone ? True : False,
       location_map: {
         type: "Point",
         coordinates: [longitude, latitude] // đúng chuẩn GeoJSON

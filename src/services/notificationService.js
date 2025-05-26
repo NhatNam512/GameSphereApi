@@ -51,7 +51,7 @@ class NotificationService {
         );
     }
 
-    async sendTicketNotification(user, eventName, avatar, eventId) {
+    async sendTicketNotification(user, eventName, avatar, eventId, order) {
         const tokens = user?.fcmTokens || [];
         if (tokens.length === 0) return;
 
