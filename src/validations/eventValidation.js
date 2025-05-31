@@ -19,7 +19,8 @@ const eventSchema = Joi.object({
   longitude: Joi.number(),
   latitude: Joi.number(),
   userId: Joi.string().required(),
-  tags: Joi.array().items(Joi.string())
+  tags: Joi.array().items(Joi.string()),
+  typeBase: Joi.string().required(),
 });
 
 const eventTagsSchema = Joi.object({

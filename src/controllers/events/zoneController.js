@@ -1,8 +1,10 @@
 const { getSocketIO } = require("../../../socket/socket");
 const eventModel = require("../../models/events/eventModel");
-const seatModel = require("../../models/events/seatModel");
+const seatModel = require("../../models/events/seatBookingModel");
 const zoneModel = require("../../models/events/zoneModel");
+const ZoneTicket = require("../../models/events/zoneTicketModel");
 const redisClient = require("../../redis/redisClient");
+const zoneBookingModel = require("../../models/events/zoneBookingModel")
 
 exports.createZone = async (req, res) => {
   try {
@@ -40,11 +42,10 @@ exports.getZones = async (req, res)=>{
     // Tìm event bằng eventId và populate trường zone
     const event = await eventModel.findById(eventId).populate('zone');
 
-    if (!event || !event.zone) {
-      // Trả về mảng rỗng nếu không tìm thấy event hoặc event chưa có zone được liên kết
+    if(event.typeBase == 'none'){
       return res.status(200).json({ message: "Sự kiện chưa có sơ đồ chỗ ngồi hoặc zone không tồn tại.", zones: [] });
     }
-
+    if(event.typeBase == 'seat'){
     // Lấy thông tin zone từ event đã populate
     const zone = event.zone;
 
@@ -83,6 +84,40 @@ exports.getZones = async (req, res)=>{
     const zoneWithStatus = { ...zone.toObject(), layout: { ...zone.layout.toObject(), seats: seatsWithStatus } };
 
     res.status(200).json({ message: "Lấy sơ đồ chỗ ngồi thành công.", zones: [zoneWithStatus] });
+    }
+    if(event.typeBase=='zone'){
+      const zones = await ZoneTicket.find({eventId: eventId});
+      // If no zones found, return an empty array
+    if (!zones || zones.length === 0) {
+      return res.status(200).json({ message: "Sự kiện chưa có khu vực vé.", zones: [] });
+    }
+
+    // Get all bookings (booked and reserved) for this event
+    const bookings = await zoneBookingModel.find({
+      eventId: eventId,
+      status: { $in: ['booked', 'reserved'] },
+      // Optional: Add logic here to filter out expired reserved bookings if not handled by TTL in MongoDB/Redis
+    });
+
+    // Calculate booked and reserved quantities for each zone
+    const bookingCounts = bookings.reduce((acc, booking) => {
+      const zoneId = booking.zoneId.toString();
+      acc[zoneId] = (acc[zoneId] || 0) + booking.quantity;
+      return acc;
+    }, {});
+
+    // Combine zone info with available ticket count
+    const zonesWithAvailability = zones.map(zone => {
+      const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
+      const availableCount = zone.totalTicketCount - bookedAndReservedCount;
+      return {
+        ...zone.toObject(),
+        availableCount: Math.max(0, availableCount), // Ensure availableCount is not negative
+      };
+    });
+
+    res.status(200).json({ message: "Lấy thông tin khu vực vé thành công.", zones: zonesWithAvailability });
+    }
 
   } catch (error) {
     console.error("Lỗi khi lấy sơ đồ chỗ ngồi:", error);
@@ -129,3 +164,4 @@ exports.reserveSeats = async (req, res) => {
 
   return res.status(200).json({ message: "Giữ ghế thành công.", expiresIn: 600 });
 };
+

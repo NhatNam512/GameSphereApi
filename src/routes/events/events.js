@@ -11,6 +11,8 @@ const { getRecommendedEvents } = require('../../controllers/events/recommendedEv
 const { addTagsToEvent } = require('../../controllers/events/tagController');
 const { getTopViewedEvents } = require('../../controllers/events/interactionController');
 const { getZones } = require('../../controllers/events/zoneController');
+const { default: mongoose } = require('mongoose');
+const zoneTicketModel = require('../../models/events/zoneTicketModel');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -158,11 +160,18 @@ router.get("/categories/:id", async function (req,  res) {
   }  
 })
 
-router.post("/add", validate(eventSchema), async function (req, res, next) {
+router.post("/add", async function (req, res, next) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const { name, description, timeStart, timeEnd, avatar, images, categories, banner, location, ticketPrice, ticketQuantity, rating, longitude, latitude, userId, tags, zone } = req.body;
-    
-    const newItem = await eventModel.create({ 
+    const { 
+      name, description, timeStart, timeEnd, 
+      avatar, images, categories, banner, 
+      location, ticketPrice, ticketQuantity, 
+      rating, longitude, latitude, userId, tags, zone,
+      typeBase, zones
+    } = req.body;
+    const [newItem] = await eventModel.create([{ 
       name, 
       description, 
       timeStart, 
@@ -177,14 +186,33 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
       rating, 
       userId,
       tags,
-      zone: zone ? zone : null,
-      hasSeats: zone ? True : False,
+      typeBase: typeBase,
+      zone: (typeBase === 'zone' || typeBase === 'seat') ? (zone ? zone : null) : null,
       location_map: {
         type: "Point",
         coordinates: [longitude, latitude] // đúng chuẩn GeoJSON
       }
-    });
+    }], {session});
 
+    // If typeBase is "zone", create zone tickets
+    if (typeBase === 'zone' && req.body.zones && Array.isArray(req.body.zones)) {
+      const zoneTicketsData = req.body.zones;
+      const zoneTicketsToCreate = zoneTicketsData.map(zoneData => ({
+        eventId: newItem._id,
+        name: zoneData.name,
+        totalTicketCount: zoneData.totalTicketCount,
+        price: zoneData.price,
+        createdBy: userId,
+        updatedBy: userId,
+      }));
+
+      if (zoneTicketsToCreate.length > 0) {
+        await zoneTicketModel.insertMany(zoneTicketsToCreate, { session });
+      }
+    }
+
+    await session.commitTransaction(); // Commit the transaction if everything is successful
+    session.endSession();
     // Xóa cache để cập nhật danh sách mới
     await redis.del("events");
     // await updateEventVector(newItem._id.toString(), description);
@@ -198,6 +226,8 @@ router.post("/add", validate(eventSchema), async function (req, res, next) {
     });
   }
   catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     // Chuyển lỗi đến error handler
     next(error);
   }

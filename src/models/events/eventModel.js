@@ -36,9 +36,10 @@ const events = new schema({
             index: '2dsphere' 
         }, // [lng, lat]
     },
-    userId: { type: oid, ref: "users" },
 
-    hasSeats: { type: Boolean, default: false },
+    typeBase: {type: String, enum: ['seat', 'zone', 'none'], require: true},
+
+    userId: { type: oid, ref: "users" },
 
     zone: { type: oid, ref: 'zones' },
     
@@ -51,5 +52,7 @@ events.index({ userId: 1 });
 events.index({ status: 1 });
 events.index({ name: 1 });
 events.index({ description: 1 });
+events.index({ tags: 1 });
+events.index({ embedding: '2dsphere' }); 
 
 module.exports = mongoose.models.events || mongoose.model("events", events);

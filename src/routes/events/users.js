@@ -304,7 +304,9 @@ router.post('/getNotification', async function (req, res) {
 router.get("/eventOfOrganization", authenticate, getEvents);
 
 router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
+
 router.post('/forgotPassword/verify', forgotPasswordController.verifyForgotPassword);
+
 router.put('/addTag', async function (req, res) {
   try {
     const { userId, tag } = req.body;  // tag là mảng chứa các tag cần thêm
