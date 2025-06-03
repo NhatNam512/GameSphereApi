@@ -4,19 +4,20 @@ const oid = schema.ObjectId;
 
 const SeatBookingSchema = new schema(
   {
-    eventId: { type: oid, required: true },
+    eventId: { type: oid, ref: 'events', required: true },
     userId: { type: oid, ref: 'users', required: true },
     seats: [
       {
         seatId: { type: String, required: true },
-        type: { type: String, enum: ['normal', 'vip'], required: true },
+        zoneId: { type: oid, ref: 'zones' },
       }
     ],
     totalPrice: { type: Number},
     status: {
       type: String,
-      enum: ['booked', 'cancelled', 'reserved'],
-      default: 'booked',
+      enum: ['pending', 'reserved', 'booked', 'cancelled', 'expired'],
+      default: 'pending',
+      required: true,
     },
     reservedAt: {
       type: Date,
@@ -26,10 +27,24 @@ const SeatBookingSchema = new schema(
       type: Date,
       default: () => new Date(Date.now() + 10 * 60 * 1000), 
     },
+    orderId: {
+      type: oid,
+      ref: 'orders',
+      index: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
   { timestamps: true }
 );
 
+SeatBookingSchema.index({ eventId: 1, userId: 1, status: 1 });
 SeatBookingSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
-module.exports = mongoose.model('SeatBooking', SeatBookingSchema);
+module.exports = mongoose.model('seatbookings', SeatBookingSchema);

@@ -5,6 +5,7 @@ const zoneModel = require("../../models/events/zoneModel");
 const ZoneTicket = require("../../models/events/zoneTicketModel");
 const redisClient = require("../../redis/redisClient");
 const zoneBookingModel = require("../../models/events/zoneBookingModel")
+const SeatBookingModel = require("../../models/events/seatBookingModel");
 
 exports.createZone = async (req, res) => {
   try {
@@ -133,35 +134,104 @@ exports.reserveSeats = async (req, res) => {
     return res.status(400).json({ message: "Thiếu thông tin giữ ghế." });
   }
 
-  const failedSeats = [];
+  const reservationTimeMinutes = 10; // Thời gian giữ chỗ nhất quán
+  const expiresAt = new Date(Date.now() + reservationTimeMinutes * 60 * 1000);
 
-  for (const seat of seats) {
-    const key = `seatLock:${eventId}:${seat.seatId}`;
-    const result = await redisClient.set(key, userId, 'NX', 'EX', 600);
-    if (result !== 'OK') {
-      failedSeats.push(seat.seatId);
-    }
-  }
+  let pendingBooking = null;
 
-  if (failedSeats.length > 0) {
-    // Giải phóng các ghế đã giữ trước đó nếu 1 cái bị fail
-    for (const seatId of seats) {
-      await redisClient.del(`seatLock:${eventId}:${seatId}`);
-    }
-    return res.status(409).json({
-      message: "Một số ghế đã bị người khác giữ.",
-      failedSeats,
+  try {
+    // 1. Tạo một mục đặt chỗ 'pending'
+    pendingBooking = await SeatBookingModel.create({
+        eventId,
+        userId,
+        seats: seats.map(seat => ({
+            seatId: seat.seatId,
+            zoneId: seat.zoneId // Đảm bảo bạn gửi zoneId trong mảng seats từ client
+        })), // Lưu trữ chi tiết ghế
+        status: 'pending',
+        expiresAt: expiresAt, // Đặt thời gian hết hạn tiềm năng sớm
     });
+
+    const failedSeats = [];
+    const successfulLocks = [];
+
+    // 2. Cố gắng đặt khóa Redis cho từng ghế
+    for (const seat of seats) {
+      const key = `seatLock:${eventId}:${seat.seatId}`;
+      // Sử dụng ID đặt chỗ 'pending' làm giá trị trong khóa Redis
+      const result = await redisClient.set(key, pendingBooking._id.toString(), 'NX', 'EX', reservationTimeMinutes * 60);
+      if (result !== 'OK') {
+        failedSeats.push(seat.seatId);
+      } else {
+        successfulLocks.push(seat.seatId);
+      }
+    }
+
+    // 3. Nếu bất kỳ khóa nào thất bại, hoàn tác và trả về lỗi
+    if (failedSeats.length > 0) {
+      // Giải phóng các khóa Redis đã thành công
+      if (successfulLocks.length > 0) {
+        const lockKeysToRelease = successfulLocks.map(seatId => `seatLock:${eventId}:${seatId}`);
+        await redisClient.del(lockKeysToRelease);
+      }
+      // Xóa mục đặt chỗ 'pending'
+      if (pendingBooking) {
+          await SeatBookingModel.findByIdAndDelete(pendingBooking._id);
+      } else {
+        // Should not happen if pendingBooking was created, but good practice
+        console.error("Lỗi: pendingBooking không tồn tại khi xử lý lỗi khóa Redis.");
+      }
+
+      return res.status(409).json({
+        message: "Một số ghế đã bị người khác giữ.",
+        failedSeats,
+      });
+    }
+
+    // 4. Nếu tất cả các khóa thành công, cập nhật trạng thái đặt chỗ thành 'reserved'
+    pendingBooking.status = 'reserved';
+    await pendingBooking.save();
+
+    // 5. Phát sự kiện socket
+    const io = getSocketIO();
+    if (io) {
+      io.to(`event_${eventId}`).emit('seat_reserved', {
+        bookingId: pendingBooking._id, // Phát ID đặt chỗ
+        seats: pendingBooking.seats, // Sử dụng chi tiết ghế từ booking
+        userId,
+        expiresIn: reservationTimeMinutes * 60,
+      });
+    }
+
+    // 6. Trả về thành công kèm theo ID đặt chỗ
+    return res.status(200).json({
+      message: "Giữ ghế thành công.",
+      bookingId: pendingBooking._id,
+      expiresIn: reservationTimeMinutes * 60
+    });
+
+  } catch (error) {
+    console.error("Lỗi khi giữ ghế:", error);
+    // Ensure pending booking is cleaned up on unexpected errors
+    if (pendingBooking && pendingBooking.status === 'pending') {
+         await SeatBookingModel.findByIdAndDelete(pendingBooking._id);
+    } else if (pendingBooking) {
+        // If status is not pending, it means it was successfully reserved before error
+        // We might need a separate process to clean up expired 'reserved' bookings
+        console.warn("Lỗi xảy ra sau khi đặt chỗ thành công. Booking ID:", pendingBooking._id);
+    }
+
+    // Attempt to release any held locks in case of unexpected errors
+     if (seats && seats.length > 0) {
+        const lockKeysToRelease = seats.map(seat => `seatLock:${eventId}:${seat.seatId}`);
+        // Use try-catch here to prevent further errors during cleanup
+        try {
+             await redisClient.del(lockKeysToRelease);
+        } catch (redisError) {
+             console.error("Error releasing Redis locks during error handling:", redisError);
+        }
+    }
+    res.status(500).json({ error: error.message });
   }
-
-  // Emit socket đến room sự kiện để cập nhật ghế đã giữ
-  const io = getSocketIO();
-  io.to(`event_${eventId}`).emit('seat_reserved', {
-    seats,
-    userId,
-    expiresIn: 600,
-  });
-
-  return res.status(200).json({ message: "Giữ ghế thành công.", expiresIn: 600 });
 };
 
