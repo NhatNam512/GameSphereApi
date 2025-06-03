@@ -14,6 +14,7 @@ const authenticate = require('../../middlewares/auth');
 const Event = require("../../models/events/eventModel");
 const forgotPasswordController = require('../../controllers/auth/forgotPasswordController');
 const { getEvents } = require('../../controllers/organizer/getEvents');
+const { googleLogin } = require('../../controllers/auth/authController');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -70,7 +71,7 @@ router.post("/login", async function (req, res) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
 });
-
+router.post("/googleLogin", googleLogin);
 // Register
 router.post("/register", async function (req, res) {
   try {
