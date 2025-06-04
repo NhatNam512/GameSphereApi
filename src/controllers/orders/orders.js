@@ -219,12 +219,13 @@ exports.createTicket = async (req, res) => {
                 const ticketNumber = await generateTicketNumber();
                 const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
                 const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
+                const zone = await Zone.findById(zoneBooking.zoneId);
                 ticketsToInsert.push({
                     ...baseTicketData,
                     ticketId,
                     ticketNumber,
                     qrCode,
-                    zone: { zoneId: zoneBooking.zoneId }
+                    zone: { zoneId: zone.name }
                 });
             }
         } else if (order.bookingType === 'none') {

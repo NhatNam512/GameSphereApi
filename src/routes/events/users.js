@@ -306,7 +306,9 @@ router.get("/eventOfOrganization", authenticate, getEvents);
 
 router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
 
-router.post('/forgotPassword/verify', forgotPasswordController.verifyForgotPassword);
+router.post('/forgotPassword/verify', forgotPasswordController.verifyOtp);
+
+router.post('/forgotPassword/reset', forgotPasswordController.resetPassword);
 
 router.put('/addTag', async function (req, res) {
   try {

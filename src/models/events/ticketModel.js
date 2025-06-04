@@ -9,13 +9,12 @@ const ticket = new schema({
     orderId: {type: oid, ref: "order"},
     qrCode: {type: String},
     ticketNumber: { type: Number },
-    ticketType: {type: String},
-    amount: {type: Number},
     price: {type: Number},
     seat: {
-        seatId: { type: String }  // Ví dụ: "A1"
+        seatId: { type: String },
+        type: {string: String}
     },
-    type: {type: String},
+    zone: {type: String},
     createdAt: { type: Date, default: Date.now }, 
     status: { type: String, enum: ["issued", "used"], default: "issued" },
     issuedAt: { type: Date, default: Date.now },
