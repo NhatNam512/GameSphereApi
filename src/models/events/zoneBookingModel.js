@@ -28,14 +28,6 @@ const zoneBookingSchema = new mongoose.Schema({
     enum: ['reserved', 'booked', 'cancelled'],
     required: true,
   },
-  expiresAt: {
-    type: Date,
-    required: function() { return this.status === 'reserved'; },
-    index: {
-      expireAfterSeconds: 0, // TTL index sẽ xóa khi expiresAt < Date.now()
-      partialFilterExpression: { status: 'reserved' } // Chỉ áp dụng cho vé "reserved"
-    }
-  },
 }, { timestamps: true });
 zoneBookingSchema.index({ zoneId: 1, status: 1, expiresAt: 1 });
 zoneBookingSchema.index({ userId: 1, zoneId: 1, status: 1 }); // dùng để kiểm tra đã giữ vé chưa

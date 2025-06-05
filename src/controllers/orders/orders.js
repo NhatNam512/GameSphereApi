@@ -10,6 +10,7 @@ const redisClient = require("../../redis/redisClient");
 const notificationService = require("../../services/notificationService");
 const Counter = require("../../models/events/counterModel");
 const userModel = require("../../models/userModel");
+const ZoneTicket = require("../../models/events/zoneTicketModel");
 
 exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -219,13 +220,13 @@ exports.createTicket = async (req, res) => {
                 const ticketNumber = await generateTicketNumber();
                 const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
                 const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                const zone = await Zone.findById(zoneBooking.zoneId);
+                const zone = await ZoneTicket.findById(zoneBooking.zoneId);
                 ticketsToInsert.push({
                     ...baseTicketData,
                     ticketId,
                     ticketNumber,
                     qrCode,
-                    zone: { zoneId: zone.name }
+                    zone: { zoneId: zone._id, zoneName: zone.name }
                 });
             }
         } else if (order.bookingType === 'none') {
