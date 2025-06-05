@@ -11,6 +11,7 @@ const notificationService = require("../../services/notificationService");
 const Counter = require("../../models/events/counterModel");
 const userModel = require("../../models/userModel");
 const ZoneTicket = require("../../models/events/zoneTicketModel");
+const { sendNotificationCore } = require("../auth/sendNotification");
 
 exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -265,8 +266,16 @@ exports.createTicket = async (req, res) => {
         }
 
         // Gửi thông báo
-        await notificationService.sendTicketNotification(user, event.name, event.avatar, event._id, order);
-
+        // await notificationService.sendTicketNotification(user, event.name, event.avatar, event._id, order);
+        // await sendNotificationCore(user.fcmTokens, "Đặt vé thành công", `Bạn đã đặt ${order.amount} vé cho sự kiện "${event.name}"`, {
+        //     eventId: event._id,
+        // }, "ticket", {
+        //     eventName: event.name,
+        //     eventId: event._id,
+        //     orderId: order._id,
+        //     amount: order.amount,
+        //     bookingType: order.bookingType,
+        // });
         await session.commitTransaction();
         return res.status(200).json({ success: true, data: createdTickets });
 
