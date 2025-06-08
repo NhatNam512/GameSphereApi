@@ -6,11 +6,11 @@ const { getSocketIO } = require("../../../socket/socket");
 
 exports.createZoneTicket = async (req, res) => {
   try {
-    const { eventId, name, totalTicketCount, price } = req.body;
+    const { showtimeId, name, totalTicketCount, price } = req.body;
     const userId = req.user.id; 
 
-    if (!eventId || !name || totalTicketCount === undefined || price === undefined) {
-      return res.status(400).json({ message: "Thiếu thông tin tạo khu vực (eventId, name, totalTicketCount, price)." });
+    if (!showtimeId || !name || totalTicketCount === undefined || price === undefined) {
+      return res.status(400).json({ message: "Thiếu thông tin tạo khu vực (showtimeId, name, totalTicketCount, price)." });
     }
 
     if (totalTicketCount < 0 || price < 0) {
@@ -18,7 +18,7 @@ exports.createZoneTicket = async (req, res) => {
     }
 
     const newZoneTicket = await zoneTicketModel.create({
-      eventId,
+      showtimeId,
       name,
       totalTicketCount,
       price,
@@ -36,12 +36,12 @@ exports.createZoneTicket = async (req, res) => {
 
 exports.getZonesTicket = async (req, res) => {
   try {
-    const eventId = req.params.id;
-    if (!eventId) {
-      return res.status(400).json({ message: "Missing eventId in params." });
+    const showtimeId = req.params.id;
+    if (!showtimeId) {
+      return res.status(400).json({ message: "Missing showtimeId in params." });
     }
 
-    const zones = await zoneTicketModel.find({ eventId: eventId });
+    const zones = await zoneTicketModel.find({ showtimeId });
 
     // If no zones found, return an empty array
     if (!zones || zones.length === 0) {
@@ -50,7 +50,7 @@ exports.getZonesTicket = async (req, res) => {
 
     // Get all bookings (booked and reserved) for this event
     const bookings = await zoneBookingModel.find({
-      eventId: eventId,
+      showtimeId: showtimeId,
       status: { $in: ['booked', 'reserved'] },
       // Optional: Add logic here to filter out expired reserved bookings if not handled by TTL in MongoDB/Redis
     });
@@ -83,22 +83,23 @@ exports.getZonesTicket = async (req, res) => {
 // Function to reserve a quantity of tickets for a zone
 exports.reserveTickets = async (req, res) => {
   try {
-    const { eventId, zoneId, quantity } = req.body;
+    const { showtimeId, zoneId, quantity } = req.body;
     const userId = req.user.id;
 
     // Basic validation
-    if (!eventId || !zoneId || !quantity || quantity <= 0) {
-      return res.status(400).json({ message: "Thiếu thông tin giữ vé (eventId, zoneId, quantity > 0)." });
+    if (!showtimeId || !zoneId || !quantity || quantity <= 0) {
+      return res.status(400).json({ message: "Thiếu thông tin giữ vé (showtimeId, zoneId, quantity > 0)." });
     }
 
     // Find the zone ticket details
-    const zone = await zoneTicketModel.findById(zoneId);
+    const zone = await zoneTicketModel.findOne({ _id: zoneId, showtimeId });
     if (!zone) {
       return res.status(404).json({ message: "Không tìm thấy khu vực vé." });
     }
 
     const bookedAndReservedBookings = await zoneBookingModel.find({
       zoneId,
+      showtimeId,
       $or: [
         { status: 'booked' },
         { status: 'reserved', expiresAt: { $gt: new Date() } }
@@ -120,7 +121,7 @@ exports.reserveTickets = async (req, res) => {
     const expiresAt = new Date(Date.now() + reservationTimeMinutes * 60 * 1000);
 
     const newBooking = await zoneBookingModel.create({
-      eventId,
+      showtimeId,
       zoneId,
       userId,
       quantity,
@@ -131,7 +132,7 @@ exports.reserveTickets = async (req, res) => {
     await redisClient.set(`zoneReserve:${zoneId}:${userId}`, quantity, 'EX', reservationTimeMinutes * 60);
 
     const io = getSocketIO(); 
-    io.to(`event_${eventId}`).emit('zone_tickets_reserved', { zoneId, quantity, userId, expiresIn: reservationTimeMinutes * 60 });
+    io.to(`event_${showtimeId}`).emit('zone_tickets_reserved', { zoneId, quantity, userId, expiresIn: reservationTimeMinutes * 60 });
 
     res.status(200).json({ message: "Giữ vé thành công.", bookingId: newBooking._id, expiresIn: reservationTimeMinutes * 60 });
 
@@ -181,7 +182,7 @@ exports.bookReservedTickets = async (req, res) => {
 
     const io = getSocketIO();
     if(io) {
-        io.to(`event_${booking.eventId}`).emit('zone_tickets_booked', { zoneId: booking.zoneId, quantity: booking.quantity, userId: booking.userId });
+        io.to(`event_${booking.showtimeId}`).emit('zone_tickets_booked', { zoneId: booking.zoneId, quantity: booking.quantity, userId: booking.userId });
     }
 
     res.status(200).json({ message: "Đặt vé thành công.", bookingId: booking._id });

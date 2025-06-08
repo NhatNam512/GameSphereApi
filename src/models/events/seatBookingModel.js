@@ -5,6 +5,7 @@ const oid = schema.ObjectId;
 const SeatBookingSchema = new schema(
   {
     eventId: { type: oid, ref: 'events', required: true },
+    showtimeId: { type: oid, ref: 'showtimes', required: true },
     userId: { type: oid, ref: 'users', required: true },
     seats: [
       {

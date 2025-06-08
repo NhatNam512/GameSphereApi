@@ -1,9 +1,11 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
+const schema = mongoose.Schema;
+const oid = schema.ObjectId;
 
-const zoneTicketSchema = new mongoose.Schema({
-  eventId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'events',
+const zoneTicketSchema = new schema({
+  showtimeId: {
+    type: oid,
+    ref: 'showtimes',
     required: true,
   },
   name: {
@@ -23,11 +25,11 @@ const zoneTicketSchema = new mongoose.Schema({
   },
   // Optional: Add fields for tracking created/updated by user
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: oid,
     ref: 'users',
   },
   updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: oid,
     ref: 'users',
   },
 }, { timestamps: true }); // Adds createdAt and updatedAt timestamps

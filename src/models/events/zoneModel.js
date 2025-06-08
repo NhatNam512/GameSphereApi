@@ -18,6 +18,7 @@ const zoneSchema = new schema({
             }
         ]
     },
+    eventId: {type: oid, ref: 'events', required: true},
     createdBy: {type: oid, ref: 'users'},
     updatedBy: {type: oid, ref: 'users'},
 }, {timestamps: true});

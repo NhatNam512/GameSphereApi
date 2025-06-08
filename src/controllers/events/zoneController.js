@@ -35,6 +35,7 @@ exports.getZones = async (req, res)=>{
   try {
     // Lấy eventId từ req.params.id theo định nghĩa route /getZone/:id
     const eventId = req.params.id;
+    const { showtimeId } = req.query;
 
     if (!eventId) {
       return res.status(400).json({ message: "Thiếu eventId trong params." });
@@ -51,7 +52,11 @@ exports.getZones = async (req, res)=>{
     const zone = event.zone;
 
     // Lấy các ghế đã đặt thành công từ SeatBooking model cho sự kiện này
-    const bookedBookings = await seatModel.find({ eventId: eventId, status: 'booked' });
+    const bookedBookings = await seatModel.find({ 
+      eventId: eventId, 
+      showtimeId: showtimeId, 
+      status: 'booked' 
+    });
     const bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
 
     // Lấy các ghế đang giữ tạm thời từ Redis cho sự kiện này
@@ -127,7 +132,7 @@ exports.getZones = async (req, res)=>{
 }
 
 exports.reserveSeats = async (req, res) => {
-  const { eventId, seats } = req.body;
+  const { eventId, showtimeId, seats } = req.body;
   const userId = req.user.id;
 
   if (!eventId || !Array.isArray(seats) || seats.length === 0) {
@@ -143,13 +148,14 @@ exports.reserveSeats = async (req, res) => {
     // 1. Tạo một mục đặt chỗ 'pending'
     pendingBooking = await SeatBookingModel.create({
         eventId,
+        showtimeId,
         userId,
         seats: seats.map(seat => ({
             seatId: seat.seatId,
-            zoneId: seat.zoneId // Đảm bảo bạn gửi zoneId trong mảng seats từ client
-        })), // Lưu trữ chi tiết ghế
+            zoneId: seat.zoneId
+        })),
         status: 'pending',
-        expiresAt: expiresAt, // Đặt thời gian hết hạn tiềm năng sớm
+        expiresAt: expiresAt,
     });
 
     const failedSeats = [];
@@ -157,7 +163,7 @@ exports.reserveSeats = async (req, res) => {
 
     // 2. Cố gắng đặt khóa Redis cho từng ghế
     for (const seat of seats) {
-      const key = `seatLock:${eventId}:${seat.seatId}`;
+      const key = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
       // Sử dụng ID đặt chỗ 'pending' làm giá trị trong khóa Redis
       const result = await redisClient.set(key, pendingBooking._id.toString(), 'NX', 'EX', reservationTimeMinutes * 60);
       if (result !== 'OK') {
@@ -171,7 +177,7 @@ exports.reserveSeats = async (req, res) => {
     if (failedSeats.length > 0) {
       // Giải phóng các khóa Redis đã thành công
       if (successfulLocks.length > 0) {
-        const lockKeysToRelease = successfulLocks.map(seatId => `seatLock:${eventId}:${seatId}`);
+        const lockKeysToRelease = successfulLocks.map(seatId => `seatLock:${eventId}:${showtimeId}:${seatId}`);
         await redisClient.del(lockKeysToRelease);
       }
       // Xóa mục đặt chỗ 'pending'
@@ -223,7 +229,7 @@ exports.reserveSeats = async (req, res) => {
 
     // Attempt to release any held locks in case of unexpected errors
      if (seats && seats.length > 0) {
-        const lockKeysToRelease = seats.map(seat => `seatLock:${eventId}:${seat.seatId}`);
+        const lockKeysToRelease = seats.map(seat => `seatLock:${eventId}:${showtimeId}:${seat.seatId}`);
         // Use try-catch here to prevent further errors during cleanup
         try {
              await redisClient.del(lockKeysToRelease);

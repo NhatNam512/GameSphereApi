@@ -17,7 +17,7 @@ exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const { userId, eventId, amount, bookingId, bookingType } = req.body;
+        const { userId, eventId, showtimeId, amount, bookingId, bookingType } = req.body;
 
         // Validate bookingType
         const validTypes = ['none', 'seat', 'zone'];
@@ -41,6 +41,7 @@ exports.createOrder = async (req, res) => {
         let newOrder = {
             userId,
             eventId,
+            showtimeId,
             amount,
             status: "pending",
             bookingType
@@ -66,6 +67,7 @@ exports.createOrder = async (req, res) => {
             newOrder.amount = seatBooking.seats.length;
             newOrder.seats = seatBooking.seats;
             newOrder.bookingId = bookingId;
+            newOrder.showtimeId = seatBooking.showtimeId;
         }
 
         if (bookingType === 'zone') {
@@ -76,6 +78,7 @@ exports.createOrder = async (req, res) => {
             newOrder.amount = zoneBooking.quantity;
             newOrder.zoneId = zoneBooking.zoneId;
             newOrder.bookingId = bookingId;
+            newOrder.showtimeId = zoneBooking.showtimeId;
         }
 
         // Tạo order và cập nhật booking trong transaction
@@ -198,6 +201,7 @@ exports.createTicket = async (req, res) => {
             orderId: order._id,
             userId: order.userId,
             eventId: order.eventId,
+            showtimeId: order.showtimeId,
             amount: 1,
             status: "issued",
             createdAt: new Date()

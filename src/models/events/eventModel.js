@@ -15,10 +15,6 @@ const events = new schema({
     categories: { type: oid, ref: "categories" },
     tags: { type: [String], index: true },
 
-    ticketPrice: { type: Number },
-    ticketQuantity: { type: Number },
-    soldTickets: { type: Number, default: 0 }, 
-
     status: { type: String },
     rating: { type: Number },
     

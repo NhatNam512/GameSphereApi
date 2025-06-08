@@ -3,7 +3,7 @@ const JWT = require('jsonwebtoken');
 const User = require('../../models/userModel');
 const userModel = require('../../models/userModel');
 const config = require("../../utils/tokenConfig");
-const client = new OAuth2Client('518691740711-rrebiu8fqks45c8ijr419gudmeccfq14.apps.googleusercontent.com'); // your webClientId
+const client = new OAuth2Client('518691740711-hpgf2l7sj9ec9f0uh8695ov0lnfoscka.apps.googleusercontent.com'); // your webClientId
 
 exports.googleLogin = async (req, res) => {
     const { token } = req.body;
@@ -12,7 +12,7 @@ exports.googleLogin = async (req, res) => {
         // 1. Verify Google ID token
         const ticket = await client.verifyIdToken({
             idToken: token,
-            audience: '518691740711-rrebiu8fqks45c8ijr419gudmeccfq14.apps.googleusercontent.com',
+            audience: '518691740711-hpgf2l7sj9ec9f0uh8695ov0lnfoscka.apps.googleusercontent.com',
         });
 
         const payload = ticket.getPayload();
