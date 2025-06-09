@@ -57,14 +57,14 @@ exports.getZonesTicket = async (req, res) => {
 
     // Calculate booked and reserved quantities for each zone
     const bookingCounts = bookings.reduce((acc, booking) => {
-      const zoneId = booking.zoneId.toString();
+      const zoneId = String(booking.zoneId);
       acc[zoneId] = (acc[zoneId] || 0) + booking.quantity;
       return acc;
     }, {});
 
     // Combine zone info with available ticket count
     const zonesWithAvailability = zones.map(zone => {
-      const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
+      const bookedAndReservedCount = bookingCounts[String(zone._id)] || 0;
       const availableCount = zone.totalTicketCount - bookedAndReservedCount;
       return {
         ...zone.toObject(),

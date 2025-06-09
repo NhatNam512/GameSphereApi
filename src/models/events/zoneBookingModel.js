@@ -6,7 +6,10 @@ const zoneBookingSchema = new mongoose.Schema({
   eventId: {
     type: oid,
     ref: 'events',
-    required: true,
+  },
+  showtimeId: {
+    type: oid,
+    ref: 'showtimes'
   },
   zoneId: {
     type: oid,

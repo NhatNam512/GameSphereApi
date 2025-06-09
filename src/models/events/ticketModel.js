@@ -14,7 +14,10 @@ const ticket = new schema({
         seatId: { type: String },
         type: {string: String}
     },
-    zone: {type: String},
+    zone: {
+        zoneId: { type: oid, ref: 'zonetickets' },
+        zoneName: { type: String }
+    },
     createdAt: { type: Date, default: Date.now }, 
     status: { type: String, enum: ["issued", "used"], default: "issued" },
     issuedAt: { type: Date, default: Date.now },

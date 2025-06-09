@@ -286,7 +286,7 @@ exports.createTicket = async (req, res) => {
     } catch (e) {
         await session.abortTransaction();
         // ... giữ nguyên phần xử lý lỗi ...
-        return res.status(500).json({ success: false, message: "Lỗi hệ thống khi tạo vé." });
+        return res.status(500).json({ success: false, message: "Lỗi hệ thống khi tạo vé." + e});
     } finally {
         session.endSession();
     }

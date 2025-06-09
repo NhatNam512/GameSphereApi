@@ -13,6 +13,8 @@ const { getTopViewedEvents } = require('../../controllers/events/interactionCont
 const { getZones } = require('../../controllers/events/zoneController');
 const { default: mongoose } = require('mongoose');
 const zoneTicketModel = require('../../models/events/zoneTicketModel');
+const showtimeModel = require('../../models/events/showtimeModel');
+const zoneModel = require('../../models/events/zoneModel');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -129,12 +131,15 @@ router.get("/detail/:id", async function (req, res, next) {
       detail.longitude = detail.location_map.coordinates[0];
       detail.latitude = detail.location_map.coordinates[1];
     }
-
-    await redis.set(cacheKey, JSON.stringify(detail), 'EX', 300);
+    // Lấy các suất chiếu của sự kiện
+    const showtimeModel = require('../../models/events/showtimeModel');
+    const showtimes = await showtimeModel.find({ eventId: id });
+    const result = { ...detail.toObject(), showtimes };
+    await redis.set(cacheKey, JSON.stringify(result), 'EX', 300);
     return res.status(200).json({
       status: true,
       message: "Lấy chi tiết sự kiện thành công",
-      data: detail
+      data: result
     });
   } catch (error) {
     next(error);
@@ -164,71 +169,133 @@ router.post("/add", async function (req, res, next) {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { 
-      name, description, timeStart, timeEnd, 
-      avatar, images, categories, banner, 
-      location, ticketPrice, ticketQuantity, 
-      rating, longitude, latitude, userId, tags, zone,
-      typeBase, zones
+    const {
+      name, description, avatar, images, categories, banner,
+      location, rating, longitude, latitude, userId, tags, typeBase, zones
     } = req.body;
-    const [newItem] = await eventModel.create([{ 
-      name, 
-      description, 
-      timeStart, 
-      timeEnd, 
-      avatar, 
-      images, 
-      categories, 
-      banner, 
-      location, 
-      ticketPrice, 
-      ticketQuantity, 
-      rating, 
-      userId,
-      tags,
-      typeBase: typeBase,
-      zone: (typeBase === 'zone' || typeBase === 'seat') ? (zone ? zone : null) : null,
-      location_map: {
-        type: "Point",
-        coordinates: [longitude, latitude] // đúng chuẩn GeoJSON
+
+    // 1. Tạo event
+    const [newEvent] = await eventModel.create([
+      {
+        name,
+        description,
+        avatar,
+        images,
+        categories,
+        banner,
+        location,
+        rating,
+        userId,
+        tags,
+        typeBase: typeBase,
+        location_map: {
+          type: "Point",
+          coordinates: [longitude, latitude]
+        }
       }
-    }], {session});
+    ], { session });
 
-    // If typeBase is "zone", create zone tickets
-    if (typeBase === 'zone' && req.body.zones && Array.isArray(req.body.zones)) {
-      const zoneTicketsData = req.body.zones;
-      const zoneTicketsToCreate = zoneTicketsData.map(zoneData => ({
-        eventId: newItem._id,
-        name: zoneData.name,
-        totalTicketCount: zoneData.totalTicketCount,
-        price: zoneData.price,
-        createdBy: userId,
-        updatedBy: userId,
-      }));
+    // 2. Nếu typeBase là 'zone' và có zones
+    const zoneTicketModel = require('../../models/events/zoneTicketModel');
+    const zoneModel = require('../../models/events/zoneModel');
 
-      if (zoneTicketsToCreate.length > 0) {
-        await zoneTicketModel.insertMany(zoneTicketsToCreate, { session });
+    if (typeBase === 'zone' && Array.isArray(zones)) {
+      for (const zone of zones) {
+        // Tạo zone nếu có layout (nếu không có layout thì chỉ tạo zoneTicket)
+        let newZone = null;
+        if (zone.layout) {
+          newZone = await zoneModel.create([
+            {
+              name: zone.name,
+              layout: zone.layout,
+              eventId: newEvent._id,
+              createdBy: userId,
+              updatedBy: userId
+            }
+          ], { session });
+        }
+        // Duyệt từng showtime trong zone
+        if (Array.isArray(zone.showtimes)) {
+          for (const st of zone.showtimes) {
+            // Tạo showtime
+            const newShowtime = await showtimeModel.create([
+              {
+                eventId: newEvent._id,
+                startTime: st.startTime,
+                endTime: st.endTime,
+                ticketPrice: st.ticketPrice,
+                ticketQuantity: st.ticketQuantity
+              }
+            ], { session });
+            // Tạo zoneTicket cho showtime này
+            await zoneTicketModel.create([
+              {
+                showtimeId: newShowtime[0]._id,
+                name: zone.name,
+                totalTicketCount: st.totalTicketCount,
+                price: st.price,
+                createdBy: userId,
+                updatedBy: userId
+              }
+            ], { session });
+          }
+        }
       }
     }
 
-    await session.commitTransaction(); // Commit the transaction if everything is successful
+    if (typeBase === 'seat' && Array.isArray(zones)) {
+      for (const zone of zones) {
+        // Tạo zone với layout
+        const [newZone] = await zoneModel.create([{
+          name: zone.name,
+          layout: zone.layout,
+          eventId: newEvent._id,
+          createdBy: userId,
+          updatedBy: userId
+        }], { session });
+
+        if (Array.isArray(zone.showtimes)) {
+          for (const st of zone.showtimes) {
+            // Tạo showtime
+            const [newShowtime] = await showtimeModel.create([{
+              eventId: newEvent._id,
+              startTime: st.startTime,
+              endTime: st.endTime,
+              ticketPrice: st.ticketPrice,
+              ticketQuantity: st.ticketQuantity
+            }], { session });
+
+            // Tạo vé cho từng seat
+            if (zone.layout && Array.isArray(zone.layout.seats)) {
+              const seatTickets = zone.layout.seats.map(seat => ({
+                showtimeId: newShowtime._id,
+                name: `${zone.name} - ${seat.label}`,
+                totalTicketCount: 1,
+                price: seat.price,
+                createdBy: userId,
+                updatedBy: userId
+                // Có thể bổ sung seatId, row, col, label... nếu muốn
+              }));
+              if (seatTickets.length > 0) {
+                await zoneTicketModel.insertMany(seatTickets, { session });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    await session.commitTransaction();
     session.endSession();
-    // Xóa cache để cập nhật danh sách mới
     await redis.del("events");
-    // await updateEventVector(newItem._id.toString(), description);
-    
-    // Gửi thông báo đến Redis Pub/Sub
-    pub.publish("event_updates", JSON.stringify(newItem));
-    
+    pub.publish("event_updates", JSON.stringify(newEvent));
     res.status(200).json({
       status: true,
       message: "Thêm sự kiện thành công"
     });
-  }
-  catch (error) {
+  } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    // Chuyển lỗi đến error handler
     next(error);
   }
 });

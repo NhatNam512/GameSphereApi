@@ -48,81 +48,68 @@ exports.getZones = async (req, res)=>{
       return res.status(200).json({ message: "Sự kiện chưa có sơ đồ chỗ ngồi hoặc zone không tồn tại.", zones: [] });
     }
     if(event.typeBase == 'seat'){
-    // Lấy thông tin zone từ event đã populate
-    const zone = event.zone;
-
-    // Lấy các ghế đã đặt thành công từ SeatBooking model cho sự kiện này
-    const bookedBookings = await seatModel.find({ 
-      eventId: eventId, 
-      showtimeId: showtimeId, 
-      status: 'booked' 
-    });
-    const bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
-
-    // Lấy các ghế đang giữ tạm thời từ Redis cho sự kiện này
-    let reservedSeatIds = [];
-    let cursor = '0';
-    do {
-      const reply = await redisClient.scan(cursor, 'MATCH', `gamesphere:seatLock:${eventId}:*`);
-      cursor = reply[0];
-      const keys = reply[1];
-      keys.forEach(key => {
-        const parts = key.split(':');
-        if (parts.length === 4 && parts[0] === 'gamesphere' && parts[1] === 'seatLock' && parts[2] === eventId) {
-          reservedSeatIds.push(parts[3]); // Lấy seatId từ phần thứ 4
-        }
-      });
-    } while (cursor !== '0');
-
-    // Kết hợp thông tin zone layout với trạng thái ghế
-    const seatsWithStatus = zone.layout.seats.map(seat => {
-      let status = 'available';
-      if (bookedSeatIds.includes(seat.seatId)) {
-        status = 'booked';
-      } else if (reservedSeatIds.includes(seat.seatId)) {
-        status = 'reserved';
+      // Lấy tất cả các zone thuộc event này
+      const zones = await zoneModel.find({ eventId: eventId });
+      if (!zones || zones.length === 0) {
+        return res.status(200).json({ message: "Sự kiện chưa có sơ đồ chỗ ngồi.", zones: [] });
       }
-      // Trả về đối tượng ghế với trường status được cập nhật
-      return { ...seat.toObject(), status };
-    });
-
-    // Trả về đối tượng zone đã cập nhật trạng thái ghế, bọc trong mảng để nhất quán với API có thể có nhiều zones sau này
-    const zoneWithStatus = { ...zone.toObject(), layout: { ...zone.layout.toObject(), seats: seatsWithStatus } };
-
-    res.status(200).json({ message: "Lấy sơ đồ chỗ ngồi thành công.", zones: [zoneWithStatus] });
+      // Lấy các ghế đã đặt thành công từ SeatBooking model cho sự kiện này
+      const bookedBookings = await seatModel.find({ 
+        eventId: eventId, 
+        showtimeId: showtimeId, 
+        status: 'booked' 
+      });
+      const bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+      // Lấy các ghế đang giữ tạm thời từ SeatBookingModel cho sự kiện này
+      const reservedBookings = await SeatBookingModel.find({
+        eventId: eventId,
+        showtimeId: showtimeId,
+        status: 'reserved',
+      });
+      const reservedSeatIds = reservedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+      // Duyệt từng zone để cập nhật trạng thái ghế
+      const zonesWithStatus = zones.map(zone => {
+        const seatsWithStatus = (zone.layout && Array.isArray(zone.layout.seats)) ? zone.layout.seats.map(seat => {
+          let status = 'available';
+          if (bookedSeatIds.includes(seat.seatId)) {
+            status = 'booked';
+          } else if (reservedSeatIds.includes(seat.seatId)) {
+            status = 'reserved';
+          }
+          return { ...seat.toObject ? seat.toObject() : seat, status };
+        }) : [];
+        return { ...zone.toObject(), layout: { ...zone.layout, seats: seatsWithStatus } };
+      });
+      res.status(200).json({ message: "Lấy sơ đồ chỗ ngồi thành công.", zones: zonesWithStatus });
     }
     if(event.typeBase=='zone'){
-      const zones = await ZoneTicket.find({eventId: eventId});
-      // If no zones found, return an empty array
-    if (!zones || zones.length === 0) {
-      return res.status(200).json({ message: "Sự kiện chưa có khu vực vé.", zones: [] });
-    }
+      const zones = await ZoneTicket.find({ showtimeId: showtimeId });
+      if (!zones || zones.length === 0) {
+        return res.status(200).json({ message: "Sự kiện chưa có khu vực vé.", zones: [] });
+      }
 
-    // Get all bookings (booked and reserved) for this event
-    const bookings = await zoneBookingModel.find({
-      eventId: eventId,
-      status: { $in: ['booked', 'reserved'] },
-      // Optional: Add logic here to filter out expired reserved bookings if not handled by TTL in MongoDB/Redis
-    });
+      // Lấy bookings theo showtimeId
+      const bookings = await zoneBookingModel.find({
+        showtimeId: showtimeId,
+        status: { $in: ['booked', 'reserved'] },
+      });
 
-    // Calculate booked and reserved quantities for each zone
-    const bookingCounts = bookings.reduce((acc, booking) => {
-      const zoneId = booking.zoneId.toString();
-      acc[zoneId] = (acc[zoneId] || 0) + booking.quantity;
-      return acc;
-    }, {});
+      const bookingCounts = bookings.reduce((acc, booking) => {
+        const zoneId = booking.zoneId.toString();
+        acc[zoneId] = (acc[zoneId] || 0) + booking.quantity;
+        return acc;
+      }, {});
 
-    // Combine zone info with available ticket count
-    const zonesWithAvailability = zones.map(zone => {
-      const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
-      const availableCount = zone.totalTicketCount - bookedAndReservedCount;
-      return {
-        ...zone.toObject(),
-        availableCount: Math.max(0, availableCount), // Ensure availableCount is not negative
-      };
-    });
+      const zonesWithAvailability = zones.map(zone => {
+        const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
+        const availableCount = zone.totalTicketCount - bookedAndReservedCount;
+        return {
+          ...zone.toObject(),
+          availableCount: Math.max(0, availableCount),
+        };
+      });
 
-    res.status(200).json({ message: "Lấy thông tin khu vực vé thành công.", zones: zonesWithAvailability });
+      res.status(200).json({ message: "Lấy thông tin khu vực vé thành công.", zones: zonesWithAvailability });
     }
 
   } catch (error) {
@@ -132,111 +119,110 @@ exports.getZones = async (req, res)=>{
 }
 
 exports.reserveSeats = async (req, res) => {
-  const { eventId, showtimeId, seats } = req.body;
+  const { eventId, showtimeId, seat, action } = req.body; // seat: { seatId, zoneId }, action: 'select' | 'deselect'
   const userId = req.user.id;
 
-  if (!eventId || !Array.isArray(seats) || seats.length === 0) {
-    return res.status(400).json({ message: "Thiếu thông tin giữ ghế." });
+  if (!eventId || !showtimeId || !seat || !seat.seatId || !seat.zoneId || !action || !['select', 'deselect'].includes(action)) {
+    return res.status(400).json({ message: "Thiếu thông tin giữ ghế hoặc hành động không hợp lệ." });
   }
 
   const reservationTimeMinutes = 10; // Thời gian giữ chỗ nhất quán
   const expiresAt = new Date(Date.now() + reservationTimeMinutes * 60 * 1000);
-
-  let pendingBooking = null;
+  const seatKey = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
+  const io = getSocketIO();
 
   try {
-    // 1. Tạo một mục đặt chỗ 'pending'
-    pendingBooking = await SeatBookingModel.create({
-        eventId,
-        showtimeId,
-        userId,
-        seats: seats.map(seat => ({
-            seatId: seat.seatId,
-            zoneId: seat.zoneId
-        })),
-        status: 'pending',
-        expiresAt: expiresAt,
+    let currentBooking = await SeatBookingModel.findOne({
+      userId,
+      eventId,
+      showtimeId,
+      status: { $in: ['pending', 'reserved'] },
     });
 
-    const failedSeats = [];
-    const successfulLocks = [];
-
-    // 2. Cố gắng đặt khóa Redis cho từng ghế
-    for (const seat of seats) {
-      const key = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
-      // Sử dụng ID đặt chỗ 'pending' làm giá trị trong khóa Redis
-      const result = await redisClient.set(key, pendingBooking._id.toString(), 'NX', 'EX', reservationTimeMinutes * 60);
-      if (result !== 'OK') {
-        failedSeats.push(seat.seatId);
-      } else {
-        successfulLocks.push(seat.seatId);
-      }
-    }
-
-    // 3. Nếu bất kỳ khóa nào thất bại, hoàn tác và trả về lỗi
-    if (failedSeats.length > 0) {
-      // Giải phóng các khóa Redis đã thành công
-      if (successfulLocks.length > 0) {
-        const lockKeysToRelease = successfulLocks.map(seatId => `seatLock:${eventId}:${showtimeId}:${seatId}`);
-        await redisClient.del(lockKeysToRelease);
-      }
-      // Xóa mục đặt chỗ 'pending'
-      if (pendingBooking) {
-          await SeatBookingModel.findByIdAndDelete(pendingBooking._id);
-      } else {
-        // Should not happen if pendingBooking was created, but good practice
-        console.error("Lỗi: pendingBooking không tồn tại khi xử lý lỗi khóa Redis.");
-      }
-
-      return res.status(409).json({
-        message: "Một số ghế đã bị người khác giữ.",
-        failedSeats,
-      });
-    }
-
-    // 4. Nếu tất cả các khóa thành công, cập nhật trạng thái đặt chỗ thành 'reserved'
-    pendingBooking.status = 'reserved';
-    await pendingBooking.save();
-
-    // 5. Phát sự kiện socket
-    const io = getSocketIO();
-    if (io) {
-      io.to(`event_${eventId}`).emit('seat_reserved', {
-        bookingId: pendingBooking._id, // Phát ID đặt chỗ
-        seats: pendingBooking.seats, // Sử dụng chi tiết ghế từ booking
-        userId,
-        expiresIn: reservationTimeMinutes * 60,
-      });
-    }
-
-    // 6. Trả về thành công kèm theo ID đặt chỗ
-    return res.status(200).json({
-      message: "Giữ ghế thành công.",
-      bookingId: pendingBooking._id,
-      expiresIn: reservationTimeMinutes * 60
-    });
-
-  } catch (error) {
-    console.error("Lỗi khi giữ ghế:", error);
-    // Ensure pending booking is cleaned up on unexpected errors
-    if (pendingBooking && pendingBooking.status === 'pending') {
-         await SeatBookingModel.findByIdAndDelete(pendingBooking._id);
-    } else if (pendingBooking) {
-        // If status is not pending, it means it was successfully reserved before error
-        // We might need a separate process to clean up expired 'reserved' bookings
-        console.warn("Lỗi xảy ra sau khi đặt chỗ thành công. Booking ID:", pendingBooking._id);
-    }
-
-    // Attempt to release any held locks in case of unexpected errors
-     if (seats && seats.length > 0) {
-        const lockKeysToRelease = seats.map(seat => `seatLock:${eventId}:${showtimeId}:${seat.seatId}`);
-        // Use try-catch here to prevent further errors during cleanup
-        try {
-             await redisClient.del(lockKeysToRelease);
-        } catch (redisError) {
-             console.error("Error releasing Redis locks during error handling:", redisError);
+    if (action === 'select') {
+      // Kiểm tra xem ghế đã được đặt hoặc giữ bởi người khác chưa
+      const existingSeatLock = await redisClient.get(seatKey);
+      if (existingSeatLock) {
+        // Nếu ghế đã bị khóa bởi booking khác (không phải của người dùng hiện tại)
+        if (!currentBooking || existingSeatLock !== currentBooking._id.toString()) {
+           return res.status(409).json({ message: `Ghế ${seat.seatId} đã bị người khác giữ hoặc đặt.` });
         }
+      }
+      // Nếu ghế đã có trong booking hiện tại, không làm gì cả
+      if (currentBooking && currentBooking.seats.some(s => s.seatId === seat.seatId)) {
+        return res.status(200).json({ message: "Ghế đã được chọn trước đó.", bookingId: currentBooking._id });
+      }
+
+      const redisResult = await redisClient.set(seatKey, currentBooking ? currentBooking._id.toString() : 'temp', 'NX', 'EX', reservationTimeMinutes * 60);
+      if (redisResult !== 'OK') {
+        return res.status(409).json({ message: `Ghế ${seat.seatId} đã bị người khác giữ.` });
+      }
+
+      if (!currentBooking) {
+        currentBooking = await SeatBookingModel.create({
+          eventId,
+          showtimeId,
+          userId,
+          seats: [{ seatId: seat.seatId, zoneId: seat.zoneId }],
+          status: 'pending', // Sẽ cập nhật thành reserved nếu có ghế
+          expiresAt: expiresAt,
+        });
+         await redisClient.set(seatKey, currentBooking._id.toString(), 'XX', 'EX', reservationTimeMinutes * 60); // Cập nhật lại giá trị key với booking ID thật
+      } else {
+        currentBooking.seats.push({ seatId: seat.seatId, zoneId: seat.zoneId });
+        currentBooking.expiresAt = expiresAt; // Cập nhật thời gian hết hạn
+      }
+      currentBooking.status = 'reserved'; // Chuyển sang reserved nếu có ghế được chọn
+      await currentBooking.save();
+
+      if (io) {
+        io.to(`event_${eventId}`).emit('seat_updated', { seatId: seat.seatId, status: 'reserved', showtimeId });
+        io.to(`user_${userId}`).emit('booking_updated', { bookingId: currentBooking._id, seats: currentBooking.seats, expiresIn: reservationTimeMinutes * 60 });
+      }
+      return res.status(200).json({
+        message: "Chọn ghế thành công.",
+        bookingId: currentBooking._id,
+        expiresIn: reservationTimeMinutes * 60,
+        currentSeats: currentBooking.seats,
+      });
+
+    } else if (action === 'deselect') {
+      if (!currentBooking || !currentBooking.seats.some(s => s.seatId === seat.seatId)) {
+        return res.status(400).json({ message: "Ghế chưa được chọn hoặc không tồn tại trong booking hiện tại." });
+      }
+
+      // Xóa ghế khỏi booking
+      currentBooking.seats = currentBooking.seats.filter(s => s.seatId !== seat.seatId);
+      currentBooking.expireAt = expiresAt; // Cập nhật thời gian hết hạn
+
+      // Giải phóng khóa Redis
+      await redisClient.del(seatKey);
+      if (io) {
+        io.to(`event_${eventId}`).emit('seat_updated', { seatId: seat.seatId, status: 'available', showtimeId });
+      }
+
+      if (currentBooking.seats.length === 0) {
+        // Nếu không còn ghế nào, xóa booking hoặc chuyển về pending
+        await SeatBookingModel.findByIdAndDelete(currentBooking._id);
+        if (io) {
+            io.to(`user_${userId}`).emit('booking_cleared', { bookingId: currentBooking._id });
+        }
+        return res.status(200).json({ message: "Bỏ chọn ghế thành công. Booking trống và đã được xóa." });
+      } else {
+        await currentBooking.save();
+         if (io) {
+            io.to(`user_${userId}`).emit('booking_updated', { bookingId: currentBooking._id, seats: currentBooking.seats, expiresIn: reservationTimeMinutes * 60 });
+        }
+        return res.status(200).json({
+          message: "Bỏ chọn ghế thành công.",
+          bookingId: currentBooking._id,
+          expiresIn: reservationTimeMinutes * 60,
+          currentSeats: currentBooking.seats,
+        });
+      }
     }
+  } catch (error) {
+    console.error("Lỗi khi xử lý ghế:", error);
     res.status(500).json({ error: error.message });
   }
 };
