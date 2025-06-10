@@ -6,17 +6,17 @@ const config = require("../../utils/tokenConfig");
 const client = new OAuth2Client('518691740711-hpgf2l7sj9ec9f0uh8695ov0lnfoscka.apps.googleusercontent.com'); // your webClientId
 
 exports.googleLogin = async (req, res) => {
-    const { token } = req.body;
+    const { idToken } = req.body; // Đổi từ 'token' sang 'idToken' để phù hợp với client side
 
     try {
         // 1. Verify Google ID token
         const ticket = await client.verifyIdToken({
-            idToken: token,
+            idToken: idToken, // Sử dụng idToken
             audience: '518691740711-hpgf2l7sj9ec9f0uh8695ov0lnfoscka.apps.googleusercontent.com',
         });
 
         const payload = ticket.getPayload();
-        const { email, name, picture, sub: googleId } = payload;
+        const { email, name, photo, sub: googleId } = payload;
 
         // 2. Tìm hoặc tạo user
         let user = await User.findOne({ email });
@@ -25,12 +25,14 @@ exports.googleLogin = async (req, res) => {
             user = new User({
                 username: name,
                 email: email,
-                picUrl: picture,
+                picUrl: photo,
                 role: 3, // mặc định là người dùng thường
                 // provider: 'google',
             });
             await user.save();
         }
+
+        // 3. Tạo token và refresh token
         const tokenPayload = {
             id: user._id,
             email: user.email,
@@ -40,7 +42,10 @@ exports.googleLogin = async (req, res) => {
         const tokenUser = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1h" });
         const refreshToken = JWT.sign({ id: user._id }, config.SECRETKEY, { expiresIn: '7d' });
 
-        await userModel.findByIdAndUpdate(user._id, { refreshToken });
+        // Cập nhật refreshToken vào user trong DB (Nếu có trường refreshToken trong UserModel)
+        // Đảm bảo userModel được import hoặc bạn đang sử dụng User model trực tiếp
+        await User.findByIdAndUpdate(user._id, { refreshToken }); // Đổi userModel thành User
+
         // 4. Trả dữ liệu cho client
         res.status(200).json({
             status: 200,
@@ -50,7 +55,7 @@ exports.googleLogin = async (req, res) => {
                 email: user.email,
                 token: tokenUser,
                 refreshToken,
-                fcmTokens: user.fcmTokens || [],
+                fcmTokens: user.fcmTokens || [], // Đảm bảo trường fcmTokens tồn tại trong model User
                 role: user.role
             }
         });
