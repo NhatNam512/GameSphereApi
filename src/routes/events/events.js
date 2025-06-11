@@ -171,7 +171,7 @@ router.post("/add", async function (req, res, next) {
   try {
     const {
       name, description, avatar, images, categories, banner,
-      location, rating, longitude, latitude, userId, tags, typeBase, zones
+      location, rating, longitude, latitude, userId, tags, typeBase, zones, timeStart, timeEnd
     } = req.body;
 
     // 1. Tạo event
@@ -188,6 +188,8 @@ router.post("/add", async function (req, res, next) {
         userId,
         tags,
         typeBase: typeBase,
+        timeStart,
+        timeEnd,
         location_map: {
           type: "Point",
           coordinates: [longitude, latitude]
