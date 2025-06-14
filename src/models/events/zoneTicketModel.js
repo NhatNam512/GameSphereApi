@@ -13,6 +13,7 @@ const zoneTicketSchema = new schema({
     required: true,
     trim: true,
   },
+  eventId: {type: oid, ref: 'events'},
   totalTicketCount: {
     type: Number,
     required: true,

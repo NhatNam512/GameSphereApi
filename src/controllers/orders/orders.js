@@ -17,7 +17,7 @@ exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const { userId, eventId, showtimeId, amount, bookingId, bookingType } = req.body;
+        const { userId, eventId, showtimeId, amount, bookingId, bookingType, totalPrice } = req.body;
 
         // Validate bookingType
         const validTypes = ['none', 'seat', 'zone'];
@@ -26,8 +26,8 @@ exports.createOrder = async (req, res) => {
         }
 
         // Validate chung
-        if (!userId || !eventId || !amount || amount < 1) {
-            return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc số lượng vé không hợp lệ." });
+        if (!userId || !eventId || !amount || amount < 1 || !totalPrice || totalPrice < 0) {
+            return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc số lượng vé/tổng tiền không hợp lệ." });
         }
 
         // Kiểm tra trùng lặp order theo bookingId (nếu có)
@@ -44,7 +44,8 @@ exports.createOrder = async (req, res) => {
             showtimeId,
             amount,
             status: "pending",
-            bookingType
+            bookingType,
+            totalPrice
         };
 
         if (bookingType === 'none') {
@@ -203,6 +204,7 @@ exports.createTicket = async (req, res) => {
             eventId: order.eventId,
             showtimeId: order.showtimeId,
             amount: 1,
+            totalPrice: order.totalPrice / order.amount,
             status: "issued",
             createdAt: new Date()
         };

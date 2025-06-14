@@ -77,18 +77,60 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find()
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
       .lean();
     console.timeEnd("🗃️ DB Query");
 
-    // 👉 Map location_map -> longitude/latitude
-    const mappedEvents = events.map(ev => {
+    // 👉 Map locamap -> longitude/latitude and add min/max ticket prices
+    const mappedEvents = await Promise.all(events.map(async (ev) => {
       if (ev.location_map && ev.location_map.coordinates) {
         ev.longitude = ev.location_map.coordinates[0];
         ev.latitude = ev.location_map.coordinates[1];
       }
+      
+      let ticketPrices = [];
+
+      if (ev.typeBase === 'seat') {
+        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
+        console.log(`Event ID: ${ev._id}, Zones found: ${zones.length}`);
+        if (zones.length === 0) {
+          console.log("No zones found for this event.");
+        }
+        zones.forEach(zone => {
+          console.log("Processing zone:", zone._id);
+          if (zone && zone.layout && zone.layout.seats) {
+            const currentZonePrices = zone.layout.seats.map(seat => seat.price).filter(price => price !== undefined && price !== null);
+            console.log(`Prices from current zone (${zone._id}):`, currentZonePrices);
+            ticketPrices.push(...currentZonePrices);
+          } else {
+            console.log(`Zone ${zone._id} does not have valid layout.seats or seats are empty.`);
+          }
+        });
+        console.log("All collected ticket prices for seat-based event:", ticketPrices);
+      } 
+      else if (ev.typeBase === 'zone') {
+        const zoneTickets = await zoneTicketModel
+          .find({ eventId: ev._id })
+          .select('price');
+      
+        ticketPrices = zoneTickets
+          .map(t => t.price)
+          .filter(price => price !== undefined && price !== null);
+      }
+      else if (ev.typeBase === 'none') {
+        const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
+        ticketPrices = showtimes.map(st => st.ticketPrice).filter(price => price !== undefined && price !== null);
+      }
+      
+      if (ticketPrices.length > 0) {
+        ev.minTicketPrice = Math.min(...ticketPrices);
+        ev.maxTicketPrice = Math.max(...ticketPrices);
+      } else {
+        ev.minTicketPrice = null; 
+        ev.maxTicketPrice = null;
+      }
       return ev;
-    });
+    }));
 
     console.time("📤 Redis SET");
     await redis.set(cacheKey, JSON.stringify(mappedEvents), 'EX', 300);
@@ -171,7 +213,8 @@ router.post("/add", async function (req, res, next) {
   try {
     const {
       name, description, avatar, images, categories, banner,
-      location, rating, longitude, latitude, userId, tags, typeBase, zones, timeStart, timeEnd
+      location, rating, longitude, latitude, userId, tags, typeBase, zones, timeStart, timeEnd,
+      showtimes
     } = req.body;
 
     // 1. Tạo event
@@ -197,6 +240,21 @@ router.post("/add", async function (req, res, next) {
       }
     ], { session });
 
+    // Create all event-level showtimes first
+    const createdShowtimes = [];
+    if (Array.isArray(showtimes)) {
+      for (const st of showtimes) {
+        const [newShowtime] = await showtimeModel.create([{
+          eventId: newEvent._id,
+          startTime: st.startTime,
+          endTime: st.endTime,
+          ticketPrice: st.ticketPrice,
+          ticketQuantity: st.ticketQuantity
+        }], { session });
+        createdShowtimes.push(newShowtime);
+      }
+    }
+
     // 2. Nếu typeBase là 'zone' và có zones
     const zoneTicketModel = require('../../models/events/zoneTicketModel');
     const zoneModel = require('../../models/events/zoneModel');
@@ -206,36 +264,28 @@ router.post("/add", async function (req, res, next) {
         // Tạo zone nếu có layout (nếu không có layout thì chỉ tạo zoneTicket)
         let newZone = null;
         if (zone.layout) {
-          newZone = await zoneModel.create([
+          [newZone] = await zoneTicketModel.create([
             {
               name: zone.name,
-              layout: zone.layout,
+              totalTicketCount: zone.totalTicketCount,
+              price: zone.price,
               eventId: newEvent._id,
               createdBy: userId,
               updatedBy: userId
             }
           ], { session });
         }
-        // Duyệt từng showtime trong zone
-        if (Array.isArray(zone.showtimes)) {
-          for (const st of zone.showtimes) {
-            // Tạo showtime
-            const newShowtime = await showtimeModel.create([
-              {
-                eventId: newEvent._id,
-                startTime: st.startTime,
-                endTime: st.endTime,
-                ticketPrice: st.ticketPrice,
-                ticketQuantity: st.ticketQuantity
-              }
-            ], { session });
-            // Tạo zoneTicket cho showtime này
+        // Iterate over the pre-created event-level showtimes
+        if (createdShowtimes.length > 0) {
+          for (const newShowtime of createdShowtimes) {
+            // Tạo zoneTicket cho showtime này, using zone's properties
             await zoneTicketModel.create([
               {
-                showtimeId: newShowtime[0]._id,
+                showtimeId: newShowtime._id, // Use the pre-created showtime ID
                 name: zone.name,
-                totalTicketCount: st.totalTicketCount,
-                price: st.price,
+                totalTicketCount: zone.totalTicketCount, // Assumed to be on zone object
+                price: zone.price, // Assumed to be on zone object
+                eventId: newEvent._id,
                 createdBy: userId,
                 updatedBy: userId
               }
@@ -256,21 +306,13 @@ router.post("/add", async function (req, res, next) {
           updatedBy: userId
         }], { session });
 
-        if (Array.isArray(zone.showtimes)) {
-          for (const st of zone.showtimes) {
-            // Tạo showtime
-            const [newShowtime] = await showtimeModel.create([{
-              eventId: newEvent._id,
-              startTime: st.startTime,
-              endTime: st.endTime,
-              ticketPrice: st.ticketPrice,
-              ticketQuantity: st.ticketQuantity
-            }], { session });
-
+        // Iterate over the pre-created event-level showtimes
+        if (createdShowtimes.length > 0) {
+          for (const newShowtime of createdShowtimes) {
             // Tạo vé cho từng seat
             if (zone.layout && Array.isArray(zone.layout.seats)) {
               const seatTickets = zone.layout.seats.map(seat => ({
-                showtimeId: newShowtime._id,
+                showtimeId: newShowtime._id, // Use the pre-created showtime ID
                 name: `${zone.name} - ${seat.label}`,
                 totalTicketCount: 1,
                 price: seat.price,
