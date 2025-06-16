@@ -10,6 +10,7 @@ const ticket = new schema({
     qrCode: {type: String},
     ticketNumber: { type: Number },
     price: {type: Number},
+    showtimeId: {type: oid, ref: "showtimes"},
     seat: {
         seatId: { type: String },
         type: {string: String}

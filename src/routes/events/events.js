@@ -344,20 +344,27 @@ router.post("/add", async function (req, res, next) {
   }
 });
 
-router.put("/edit", async function (req, res) {
+router.put("/edit", async function (req, res, next) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const {
       id, name, description, timeStart, timeEnd,
       avatar, images, categories, banner,
-      location, ticketPrice, ticketQuantity,
-      rating, longitude, latitude, zone
+      location, rating, longitude, latitude, zone,
+      typeBase, showtimes, zones
     } = req.body;
 
-    const itemUpdate = await eventModel.findById(id);
+    const itemUpdate = await eventModel.findById(id).session(session);
 
     if (!itemUpdate) {
-      return res.status(404).json({ status: false, message: "Event not found" });
+      const error = new Error('Không tìm thấy sự kiện');
+      error.statusCode = 404;
+      throw error;
     }
+
+    // Capture old typeBase before updating
+    const oldTypeBase = itemUpdate.typeBase;
 
     // Cập nhật các trường cơ bản
     if (name) itemUpdate.name = name;
@@ -368,11 +375,10 @@ router.put("/edit", async function (req, res) {
     if (images) itemUpdate.images = images;
     if (categories) itemUpdate.categories = categories;
     if (banner) itemUpdate.banner = banner;
-    if (ticketPrice) itemUpdate.ticketPrice = ticketPrice;
-    if (ticketQuantity) itemUpdate.ticketQuantity = ticketQuantity;
     if (rating) itemUpdate.rating = rating;
-    if (location) itemUpdate.location = location; // locationName là tên hiển thị
+    if (location) itemUpdate.location = location;
     if (zone) itemUpdate.zone = zone;
+    if (typeBase) itemUpdate.typeBase = typeBase;
 
     // Cập nhật tọa độ nếu có
     if (longitude && latitude) {
@@ -382,7 +388,92 @@ router.put("/edit", async function (req, res) {
       };
     }
 
-    await itemUpdate.save();
+    await itemUpdate.save({ session });
+
+    // Handle showtimes updates
+    // Delete existing showtimes for this event
+    await showtimeModel.deleteMany({ eventId: id }).session(session);
+    // Create new showtimes
+    const createdShowtimes = [];
+    if (Array.isArray(showtimes)) {
+      for (const st of showtimes) {
+        const [newShowtime] = await showtimeModel.create([{
+          eventId: id,
+          startTime: st.startTime,
+          endTime: st.endTime,
+          ticketPrice: st.ticketPrice,
+          ticketQuantity: st.ticketQuantity
+        }], { session });
+        createdShowtimes.push(newShowtime);
+      }
+    }
+
+    // Handle typeBase change cleanup
+    if (oldTypeBase && typeBase && oldTypeBase !== typeBase) {
+      if (oldTypeBase === 'seat') {
+        await zoneModel.deleteMany({ eventId: id }).session(session);
+        await zoneTicketModel.deleteMany({ eventId: id }).session(session);
+      } else if (oldTypeBase === 'zone') {
+        await zoneTicketModel.deleteMany({ eventId: id }).session(session);
+      }
+    }
+
+    // Handle zones based on new typeBase
+    if (typeBase === 'zone' && Array.isArray(zones)) {
+      await zoneTicketModel.deleteMany({ eventId: id }).session(session); // Clear old zone tickets for zone type
+      for (const zone of zones) {
+        if (createdShowtimes.length > 0) {
+          for (const newShowtime of createdShowtimes) {
+            await zoneTicketModel.create([
+              {
+                showtimeId: newShowtime._id,
+                name: zone.name,
+                totalTicketCount: zone.totalTicketCount,
+                price: zone.price,
+                eventId: id,
+                // createdBy: userId, // userId is not available in edit route, consider adding or making optional
+                // updatedBy: userId
+              }
+            ], { session });
+          }
+        }
+      }
+    }
+
+    if (typeBase === 'seat' && Array.isArray(zones)) {
+      await zoneModel.deleteMany({ eventId: id }).session(session); // Clear old zones for seat type
+      await zoneTicketModel.deleteMany({ eventId: id }).session(session); // Clear old seat tickets for seat type
+      for (const zone of zones) {
+        const [newZone] = await zoneModel.create([{
+          name: zone.name,
+          layout: zone.layout,
+          eventId: id,
+          // createdBy: userId,
+          // updatedBy: userId
+        }], { session });
+
+        if (createdShowtimes.length > 0) {
+          for (const newShowtime of createdShowtimes) {
+            if (zone.layout && Array.isArray(zone.layout.seats)) {
+              const seatTickets = zone.layout.seats.map(seat => ({
+                showtimeId: newShowtime._id,
+                name: `${zone.name} - ${seat.label}`,
+                totalTicketCount: 1,
+                price: seat.price,
+                // createdBy: userId,
+                // updatedBy: userId
+              }));
+              if (seatTickets.length > 0) {
+                await zoneTicketModel.insertMany(seatTickets, { session });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    await session.commitTransaction();
+    session.endSession();
 
     // Xóa cache để cập nhật dữ liệu mới
     await redis.del(`events_detail_${id}`); // Xóa cache chi tiết sự kiện
@@ -392,7 +483,9 @@ router.put("/edit", async function (req, res) {
     res.status(200).json({ status: true, message: "Successfully updated" });
 
   } catch (e) {
-    res.status(400).json({ status: false, message: "Error: " + e.message });
+    await session.abortTransaction();
+    session.endSession();
+    next(e); // Pass error to next middleware for centralized error handling
   }
 });
 

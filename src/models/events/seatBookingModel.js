@@ -24,10 +24,6 @@ const SeatBookingSchema = new schema(
       type: Date,
       default: () => new Date(),
     },
-    expireAt: {
-      type: Date,
-      default: () => new Date(Date.now() + 10 * 60 * 1000), 
-    },
     orderId: {
       type: oid,
       ref: 'orders',
@@ -46,6 +42,5 @@ const SeatBookingSchema = new schema(
 );
 
 SeatBookingSchema.index({ eventId: 1, userId: 1, status: 1 });
-SeatBookingSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('seatbookings', SeatBookingSchema);
