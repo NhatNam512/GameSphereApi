@@ -7,6 +7,7 @@ const order = new schema({
     userId: {type: oid, ref: "users"},
     amount: {type: Number},
     totalPrice: {type: Number},
+    showtimeId: {type: oid, ref: "showtimes"},
     status: {type: String, enum: ["pending", "paid", "failed"], default: "pending"},
     seats: [{
         seatId: { type: String,},

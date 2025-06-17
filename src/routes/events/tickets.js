@@ -28,7 +28,9 @@ router.get("/getTicket/:userId", async function (req, res) {
         if(!user) return res.status(404).json({error: "Not Found User"});
 
         //Lấy vé của user
-        const tickets = await Ticket.find({ userId: userId });
+        const tickets = await Ticket.find({ userId: userId })
+                                    .populate('showtimeId') // Populate showtime details
+                                    .lean();
         if(!tickets) return res.status(404).json({error: "Not Found Ticket"});
         //Lấy danh sách eventId duy nhất
         const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
@@ -43,7 +45,10 @@ router.get("/getTicket/:userId", async function (req, res) {
                 });
                 return {
                     ...event,
-                    tickets: filteredTickets
+                    tickets: filteredTickets.map(ticket => ({
+                        ...ticket,
+                        showtimeStartTime: ticket.showtimeId ? ticket.showtimeId.startTime : null
+                    }))
                 };
             }),
         }

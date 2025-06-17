@@ -12,7 +12,6 @@ const events = new schema({
     images: { type: [String] },
     banner: { type: String },
 
-    categories: { type: oid, ref: "categories" },
     tags: { type: [String], index: true },
 
     status: { type: String },
