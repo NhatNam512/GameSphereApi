@@ -1,6 +1,9 @@
 const dayjs = require('dayjs');
 const Interaction = require('../../models/events/interactionModel');
 const redis = require('../../redis/redisClient');
+const zoneModel = require('../../models/events/zoneModel');
+const ZoneTicket = require('../../models/events/zoneTicketModel');
+const showtimeModel = require('../../models/events/showtimeModel');
 
 exports.createInteraction = async (req, res) => {
     try {
@@ -54,56 +57,90 @@ exports.createInteraction = async (req, res) => {
 exports.getEventTotalScores = async (req, res) => {
     const fromDate = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
     const limit = parseInt(req.query.limit) || 10;
-
-    const result = await Interaction.aggregate([
+  
+    try {
+      const result = await Interaction.aggregate([
         { $match: { date: { $gte: fromDate } } },
         {
-            $group: {
-                _id: '$eventId',
-                totalScore: { $sum: '$value' }
-            }
+          $group: {
+            _id: '$eventId',
+            totalScore: { $sum: '$value' }
+          }
         },
         {
-            $addFields: {
-                eventIdObj: {
-                    $convert: {
-                        input: '$_id',
-                        to: 'objectId',
-                        onError: null,
-                        onNull: null
-                    }
-                }
+          $addFields: {
+            eventIdObj: {
+              $convert: {
+                input: '$_id',
+                to: 'objectId',
+                onError: null,
+                onNull: null
+              }
             }
+          }
         },
         {
-            $lookup: {
-                from: 'events',
-                localField: 'eventIdObj',
-                foreignField: '_id',
-                as: 'event'
-            }
+          $lookup: {
+            from: 'events',
+            localField: 'eventIdObj',
+            foreignField: '_id',
+            as: 'event'
+          }
         },
         { $unwind: '$event' },
         { $sort: { totalScore: -1 } },
-        { $limit: limit },
-        {
-            $project: {
-                _id: 0,
-                eventId: '$_id',
-                totalScore: 1,
-                name: '$event.name',
-                timeStart: '$event.timeStart',
-                timeEnd: '$event.timeEnd',
-                avatar: '$event.avatar',
-                categories: '$event.categories',
-                tags: '$event.tags',
-                ticketPrice: '$event.ticketPrice',
-                ticketQuantity: '$event.ticketQuantity',
-            }
+        { $limit: limit }
+      ]);
+  
+      const enrichedResult = await Promise.all(result.map(async item => {
+        const ev = item.event;
+        let ticketPrices = [];
+  
+        if (ev.location_map && ev.location_map.coordinates) {
+          ev.longitude = ev.location_map.coordinates[0];
+          ev.latitude = ev.location_map.coordinates[1];
         }
-    ]);
-
-    res.json(result);
-};
+  
+        if (ev.typeBase === 'seat') {
+          const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
+          zones.forEach(zone => {
+            if (zone?.layout?.seats) {
+              const prices = zone.layout.seats.map(seat => seat.price).filter(p => p != null);
+              ticketPrices.push(...prices);
+            }
+          });
+        } else if (ev.typeBase === 'zone') {
+          const zoneTickets = await ZoneTicket.find({ eventId: ev._id }).select('price');
+          ticketPrices = zoneTickets.map(t => t.price).filter(p => p != null);
+        } else if (ev.typeBase === 'none') {
+          const showtimes = await showtimeModel.find({ eventId: ev._id }).select('ticketPrice');
+          ticketPrices = showtimes.map(st => st.ticketPrice).filter(p => p != null);
+        }
+  
+        const minTicketPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : null;
+        const maxTicketPrice = ticketPrices.length > 0 ? Math.max(...ticketPrices) : null;
+  
+        return {
+          eventId: item._id,
+          totalScore: item.totalScore,
+          name: ev.name,
+          timeStart: ev.timeStart,
+          timeEnd: ev.timeEnd,
+          avatar: ev.avatar,
+          categories: ev.categories,
+          tags: ev.tags,
+          ticketPrice: ev.ticketPrice,
+          ticketQuantity: ev.ticketQuantity,
+          minTicketPrice,
+          maxTicketPrice
+        };
+      }));
+  
+      res.json(enrichedResult);
+    } catch (e) {
+      console.error("❌ Error in getEventTotalScores:", e);
+      res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
+    }
+  };
 
 

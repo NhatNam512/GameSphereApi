@@ -51,7 +51,6 @@ exports.getRecommendedEvents = async (req, res) => {
       });
     }
 
-    // 👉 CÓ LỊCH SỬ TƯƠNG TÁC
     const topInteractions = await Interaction.aggregate([
       { $match: { userId } },
       { $group: { _id: '$eventId', total: { $sum: '$value' } } },
