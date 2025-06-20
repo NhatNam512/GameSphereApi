@@ -31,6 +31,10 @@ const zoneBookingSchema = new mongoose.Schema({
     enum: ['reserved', 'booked', 'cancelled'],
     required: true,
   },
+  expireAt: {
+    type: Date,
+    default: null,
+  },
 }, { timestamps: true });
 zoneBookingSchema.index({ zoneId: 1, status: 1, expiresAt: 1 });
 zoneBookingSchema.index({ userId: 1, zoneId: 1, status: 1 }); // dùng để kiểm tra đã giữ vé chưa

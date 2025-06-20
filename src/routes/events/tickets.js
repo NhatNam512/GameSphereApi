@@ -5,6 +5,9 @@ const config = require("../../utils/tokenConfig");
 const Ticket = require('../../models/events/ticketModel');
 const Event = require('../../models/events/eventModel')
 const User = require('../../models/userModel');
+const ZoneTicket = require('../../models/events/zoneTicketModel');
+const ZoneModel = require('../../models/events/zoneModel');
+const Showtime = require('../../models/events/showtimeModel');
 
 router.get("/all", async function (req, res) {
     try{
@@ -102,5 +105,96 @@ router.post("/verify-ticket", async (req, res) => {
       res.status(500).json({ success: false, message: "Lỗi server." });
     }
   });  
+
+// API: Lấy danh sách người tham dự của 1 sự kiện
+router.get('/attendees/:eventId', async function (req, res) {
+  try {
+    const { eventId } = req.params;
+    const Ticket = require('../../models/events/ticketModel');
+    const User = require('../../models/userModel');
+    const ZoneTicket = require('../../models/events/zoneTicketModel');
+    const ZoneModel = require('../../models/events/zoneModel');
+    const Showtime = require('../../models/events/showtimeModel');
+
+    // Lấy tất cả vé đã issued hoặc used cho event này
+    const tickets = await Ticket.find({ eventId, status: { $in: ['issued', 'used'] } })
+      .populate('userId')
+      .populate('showtimeId')
+      .lean();
+
+    // Lấy thông tin zone ticket (nếu có)
+    const zoneTicketIds = tickets.map(t => t.zone && t.zone.zoneId).filter(Boolean);
+    let zoneTicketMap = {};
+    if (zoneTicketIds.length > 0) {
+      const zoneTickets = await ZoneTicket.find({ _id: { $in: zoneTicketIds } }).lean();
+      zoneTicketMap = Object.fromEntries(zoneTickets.map(z => [z._id.toString(), z]));
+    }
+    // Lấy thông tin zone (cho vé ghế)
+    const seatZoneIds = [];
+    tickets.forEach(t => {
+      if (t.seat && t.seat.zoneId) seatZoneIds.push(t.seat.zoneId);
+    });
+    let seatZoneMap = {};
+    if (seatZoneIds.length > 0) {
+      const seatZones = await ZoneModel.find({ _id: { $in: seatZoneIds } }).lean();
+      seatZoneMap = Object.fromEntries(seatZones.map(z => [z._id.toString(), z]));
+    }
+
+    // Chuẩn hóa kết quả
+    const result = tickets.map(ticket => {
+      // attendeeId: _id của user
+      const attendeeId = ticket.userId?._id?.toString() || ticket.userId?.toString();
+      // fullName: username, nếu không có thì fallback là email
+      const fullName = ticket.userId?.username || ticket.userId?.email || '';
+      // email
+      const email = ticket.userId?.email || '';
+      // phone: phoneNumber
+      const phone = ticket.userId?.phoneNumber || '';
+      // ticketType: zone ticket name hoặc seat zone name hoặc ''
+      let ticketType = '';
+      if (ticket.zone && ticket.zone.zoneId && zoneTicketMap[ticket.zone.zoneId.toString()]) {
+        ticketType = zoneTicketMap[ticket.zone.zoneId.toString()].name;
+      } else if (ticket.seat && ticket.seat.zoneId && seatZoneMap[ticket.seat.zoneId.toString()]) {
+        ticketType = seatZoneMap[ticket.seat.zoneId.toString()].name;
+      }
+      // ticketCode
+      const ticketCode = ticket.ticketId;
+      // status: mapped
+      let status = 'not_used';
+      if (ticket.status === 'used') status = 'checked_in';
+      // (Nếu có trạng thái canceled thì bổ sung logic ở đây)
+      // checkInTime
+      const checkInTime = ticket.usedAt || null;
+      // zone
+      let zone = '';
+      if (ticket.zone && ticket.zone.zoneName) zone = ticket.zone.zoneName;
+      // seat
+      let seat = '';
+      if (ticket.seat && ticket.seat.label) seat = ticket.seat.label;
+      // showtimeTime
+      let showtimeTime = ticket.showtimeId?.startTime || null;
+      return {
+        attendeeId,
+        fullName,
+        email,
+        phone,
+        ticketType,
+        ticketCode,
+        status,
+        checkInTime,
+        zone,
+        seat,
+        showtimeTime
+      };
+    });
+    res.status(200).json({
+      status: true,
+      message: 'Lấy danh sách người tham dự thành công',
+      data: result
+    });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
+  }
+});
 
 module.exports = router;

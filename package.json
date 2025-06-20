@@ -30,6 +30,7 @@
     "mongoose": "^8.9.0",
     "morgan": "~1.9.1",
     "natural": "^8.0.1",
+    "node-cron": "^4.1.0",
     "qrcode": "^1.5.4",
     "redis": "^4.7.0",
     "shortid": "^2.2.17",

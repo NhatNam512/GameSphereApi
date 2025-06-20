@@ -15,6 +15,8 @@ const { default: mongoose } = require('mongoose');
 const zoneTicketModel = require('../../models/events/zoneTicketModel');
 const showtimeModel = require('../../models/events/showtimeModel');
 const zoneModel = require('../../models/events/zoneModel');
+const seatBookingModel = require('../../models/events/seatBookingModel');
+const zoneBookingModel = require('../../models/events/zoneBookingModel');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -176,7 +178,74 @@ router.get("/detail/:id", async function (req, res, next) {
     // Lấy các suất chiếu của sự kiện
     const showtimeModel = require('../../models/events/showtimeModel');
     const showtimes = await showtimeModel.find({ eventId: id });
-    const result = { ...detail.toObject(), showtimes };
+
+    // Lấy loại vé, loại khu vực, số vé còn lại
+    let ticketInfo = {};
+    if (detail.typeBase === 'seat') {
+      // Lấy tất cả các zone thuộc event này
+      const zoneModel = require('../../models/events/zoneModel');
+      const zones = await zoneModel.find({ eventId: id });
+      // Lấy tất cả các showtimeId của event này
+      const showtimeIds = showtimes.map(st => st._id);
+      // Lấy các booking đã đặt và đang giữ cho tất cả showtime
+      const bookedBookings = await seatBookingModel.find({ 
+        eventId: id, 
+        showtimeId: { $in: showtimeIds },
+        status: 'booked' 
+      });
+      const bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+      const reservedBookings = await seatBookingModel.find({
+        eventId: id,
+        showtimeId: { $in: showtimeIds },
+        status: 'reserved',
+      });
+      const reservedSeatIds = reservedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+      // Duyệt từng zone để cập nhật trạng thái ghế và đếm số ghế còn lại
+      const zonesWithStatus = zones.map(zone => {
+        let availableCount = 0;
+        const seatsWithStatus = (zone.layout && Array.isArray(zone.layout.seats)) ? zone.layout.seats.map(seat => {
+          let status = 'available';
+          if (bookedSeatIds.includes(seat.seatId)) {
+            status = 'booked';
+          } else if (reservedSeatIds.includes(seat.seatId)) {
+            status = 'reserved';
+          } else {
+            availableCount++;
+          }
+          return { ...seat.toObject ? seat.toObject() : seat, status };
+        }) : [];
+        return { ...zone.toObject(), layout: { ...zone.layout, seats: seatsWithStatus }, availableCount };
+      });
+      ticketInfo.zones = zonesWithStatus;
+    } else if (detail.typeBase === 'zone') {
+      // Lấy tất cả zone tickets cho event này (tất cả showtimes)
+      const zoneTicketModel = require('../../models/events/zoneTicketModel');
+      const zoneTickets = await zoneTicketModel.find({ eventId: id });
+      // Lấy tất cả booking cho các zone ticket này
+      const zoneTicketIds = zoneTickets.map(z => z._id);
+      const bookings = await zoneBookingModel.find({
+        zoneId: { $in: zoneTicketIds },
+        status: { $in: ['booked', 'reserved'] },
+      });
+      // Đếm số lượng đã đặt/giữ cho từng zone ticket
+      const bookingCounts = bookings.reduce((acc, booking) => {
+        const zoneId = booking.zoneId.toString();
+        acc[zoneId] = (acc[zoneId] || 0) + booking.quantity;
+        return acc;
+      }, {});
+      const zonesWithAvailability = zoneTickets.map(zone => {
+        const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
+        const availableCount = zone.totalTicketCount - bookedAndReservedCount;
+        return {
+          ...zone.toObject(),
+          availableCount: Math.max(0, availableCount),
+        };
+      });
+      ticketInfo.zoneTickets = zonesWithAvailability;
+    }
+    // Nếu typeBase === 'none' thì không cần gì thêm
+
+    const result = { ...detail.toObject(), showtimes, ...ticketInfo };
     await redis.set(cacheKey, JSON.stringify(result), 'EX', 300);
     return res.status(200).json({
       status: true,
