@@ -20,6 +20,10 @@ const SeatBookingSchema = new schema(
       default: 'pending',
       required: true,
     },
+    expiresAt: {
+      type: Date,
+      index: true
+    },
     reservedAt: {
       type: Date,
       default: () => new Date(),
@@ -42,5 +46,6 @@ const SeatBookingSchema = new schema(
 );
 
 SeatBookingSchema.index({ eventId: 1, userId: 1, status: 1 });
+SeatBookingSchema.index({ status: 1, expiresAt: 1 });
 
 module.exports = mongoose.model('seatbookings', SeatBookingSchema);

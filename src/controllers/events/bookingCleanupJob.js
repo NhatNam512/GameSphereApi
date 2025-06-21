@@ -12,9 +12,18 @@ cron.schedule('*/1 * * * *', async () => {
     const expiredBookings = await seatBookingModel.find({
       status: { $in: ['pending', 'reserved'] },
       expiresAt: { $lt: now }
-    });
+    }).lean(); // Sử dụng lean() để tăng hiệu suất
+
+    if (expiredBookings.length === 0) {
+      console.log('No expired bookings to clean up.');
+      return;
+    }
+    
+    const expiredBookingIds = [];
 
     for (const booking of expiredBookings) {
+      expiredBookingIds.push(booking._id);
+      
       // 1. Giải phóng Redis lock nếu cần
       const unlocks = booking.seats.map(seat =>
         redis.del(`seatLock:${booking.eventId}:${booking.showtimeId}:${seat.seatId}`)
@@ -31,15 +40,17 @@ cron.schedule('*/1 * * * *', async () => {
             seatId: s.seatId,
             showtimeId: booking.showtimeId,
             status: 'available',
+            userId: null
           })
         );
       }
-
-      // 3. Xóa booking
-      await seatBookingModel.findByIdAndDelete(booking._id);
-      console.log(`🧹 Deleted expired booking: ${booking._id}`);
     }
+
+    // 3. Xóa tất cả booking hết hạn bằng một lệnh duy nhất
+    await seatBookingModel.deleteMany({ _id: { $in: expiredBookingIds } });
+    console.log(` Deleted ${expiredBookingIds.length} expired bookings.`);
+
   } catch (error) {
-    console.error('❌ Booking cleanup failed:', error);
+    console.error(' Booking cleanup failed:', error);
   }
 });
