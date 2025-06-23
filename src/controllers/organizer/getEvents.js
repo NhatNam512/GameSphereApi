@@ -7,18 +7,16 @@ exports.getEvents = async (req, res)=>{
     try {
         const userId = req.user.id;
         const events = await eventModel.find({ userId: userId })
-        .select("_id name timeStart timeEnd ticketPrice soldTickets ticketQuantity avatar ");
+        .select("_id name timeStart timeEnd ticketPrice avatar");
         let totalTickets = 0;
         let totalRevenue = 0;
         const eventsWithShowtimes = await Promise.all(events.map(async (event) => {
           const showtimes = await showtimeModel.find({ eventId: event._id })
             .select("_id startTime endTime ticketPrice ticketQuantity soldTickets");
           
-          event.soldTickets = event.soldTickets || 0;
-          event.ticketPrice = event.ticketPrice || 0;
-
-          totalTickets += event.soldTickets;
-          totalRevenue += event.soldTickets * event.ticketPrice;
+          // Tính tổng số vé đã bán cho event này từ các showtime
+          const eventSoldTickets = showtimes.reduce((sum, showtime) => sum + (showtime.soldTickets || 0), 0);
+          totalTickets += eventSoldTickets;
 
           // Tính doanh thu từng showtime và từng zone
           const revenueByShowtime = await Promise.all(showtimes.map(async (showtime) => {
@@ -61,6 +59,7 @@ exports.getEvents = async (req, res)=>{
             }));
             return {
               showtimeId: showtime._id,
+              soldTickets: showtime.soldTickets || 0,
               revenue: showtimeRevenue,
               revenueByZone
             };
@@ -70,7 +69,13 @@ exports.getEvents = async (req, res)=>{
           const eventTotalRevenue = revenueByShowtime.reduce((sum, s) => sum + s.revenue, 0);
           totalRevenue += eventTotalRevenue;
 
-          return { ...event.toObject(), showtimes, revenueByShowtime, eventTotalRevenue };
+          return { 
+            ...event.toObject(), 
+            showtimes, 
+            revenueByShowtime, 
+            eventTotalRevenue,
+            soldTickets: eventSoldTickets // Thêm tổng số vé đã bán của event
+          };
         }));
 
         res.status(200).json({
