@@ -401,6 +401,11 @@ router.post("/add", async function (req, res, next) {
     await session.commitTransaction();
     session.endSession();
     await redis.del("events");
+    await redis.del("events_home");
+    // Xóa cache getEvents của user
+    if (userId) {
+      await redis.del(`getEvents:${userId}`);
+    }
     pub.publish("event_updates", JSON.stringify(newEvent));
     res.status(200).json({
       status: true,
@@ -543,12 +548,10 @@ router.put("/edit", async function (req, res, next) {
 
     await session.commitTransaction();
     session.endSession();
-
-    // Xóa cache để cập nhật dữ liệu mới
-    await redis.del(`events_detail_${id}`); // Xóa cache chi tiết sự kiện
-    await redis.del("events"); // Xóa cache danh sách tất cả sự kiện
-    await redis.del("events_home"); // Xóa cache danh sách sự kiện trang chủ
-
+    // Xóa cache getEvents của user
+    if (itemUpdate.userId) {
+      await redis.del(`getEvents:${itemUpdate.userId}`);
+    }
     res.status(200).json({ status: true, message: "Successfully updated" });
 
   } catch (e) {

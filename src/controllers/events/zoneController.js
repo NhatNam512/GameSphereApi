@@ -135,139 +135,120 @@ exports.getZones = async (req, res)=>{
     res.status(500).json({ error: error.message });
   }
 }
-
 exports.reserveSeats = async (req, res) => {
-  const { eventId, showtimeId, seat, action } = req.body; // seat: { seatId, zoneId }, action: 'select' | 'deselect'
+  const { eventId, showtimeId, seat, action } = req.body;
   const userId = req.user.id;
 
-  if (!eventId || !showtimeId || !seat || !seat.seatId || !action || !['select', 'deselect'].includes(action)) {
-    return res.status(400).json({ message: "Thiếu thông tin giữ ghế hoặc hành động không hợp lệ." });
+  if (!eventId || !showtimeId || !seat?.seatId || !seat?.zoneId || !['select', 'deselect'].includes(action)) {
+    return res.status(400).json({ message: "Thiếu thông tin hoặc hành động không hợp lệ." });
   }
 
-  const reservationTimeMinutes = 10;
+  const reservationTimeSeconds = 10 * 60;
   const seatKey = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
   const io = getSocketIO();
 
   try {
-    // START: Logic for 'select' action
     if (action === 'select') {
-      // 1. Check if the seat is already booked by anyone
-      const isBooked = await SeatBookingModel.findOne({ eventId, showtimeId, status: 'booked', "seats.seatId": seat.seatId });
-      if (isBooked) {
-        return res.status(409).json({ message: `Ghế ${seat.seatId} đã được người khác đặt.` });
-      }
-
-      // 2. Try to lock the seat using Redis for atomicity
-      const lockAcquired = await redisClient.set(seatKey, userId, 'NX', 'EX', reservationTimeMinutes * 60);
-      if (!lockAcquired) {
-        const lockingUser = await redisClient.get(seatKey);
-        // If the seat is locked by another user
-        if (lockingUser !== userId) {
-          return res.status(409).json({ message: `Ghế ${seat.seatId} đang được người khác giữ.` });
-        }
-        // If locked by the same user, it's a redundant select, can proceed or just return success
-      }
-      
-      // 3. Find or create the user's booking for this showtime
-      let userBooking = await SeatBookingModel.findOne({
-        userId,
-        eventId,
-        showtimeId,
-        status: 'reserved',
+      const isBooked = await SeatBookingModel.exists({
+        eventId, showtimeId, status: 'booked', 'seats.seatId': seat.seatId,
       });
 
-      const expiresAt = new Date(Date.now() + reservationTimeMinutes * 60 * 1000);
-
-      if (userBooking) {
-        // Add seat to existing booking if not already present
-        if (!userBooking.seats.some(s => s.seatId === seat.seatId)) {
-          userBooking.seats.push({ seatId: seat.seatId, zoneId: seat.zoneId });
-        }
-        userBooking.expiresAt = expiresAt; // Refresh expiration time
-      } else {
-        // Create a new booking
-        userBooking = new SeatBookingModel({
-          eventId,
-          showtimeId,
-          userId,
-          seats: [{ seatId: seat.seatId, zoneId: seat.zoneId }],
-          status: 'reserved',
-          expiresAt: expiresAt,
-        });
+      if (isBooked) {
+        return res.status(409).json({ message: `Ghế ${seat.seatId} đã được đặt.` });
       }
 
-      await userBooking.save();
-      
-      // Emit updates via Socket.IO
+      const lock = await redisClient.set(seatKey, userId, {
+        NX: true,
+        EX: reservationTimeSeconds,
+      });
+
+      const currentLocker = await redisClient.get(seatKey);
+      if (!lock && currentLocker !== userId) {
+        return res.status(409).json({ message: `Ghế ${seat.seatId} đang được giữ bởi người khác.` });
+      }
+
+      const expiresAt = new Date(Date.now() + reservationTimeSeconds * 1000);
+
+      await SeatBookingModel.updateOne(
+        {
+          userId, eventId, showtimeId, status: 'reserved',
+        },
+        {
+          $addToSet: { seats: seat },
+          $set: { expiresAt },
+        },
+        { upsert: true }
+      );
+
       if (io) {
-        io.to(`event_${eventId}`).emit('seat_updated', { seatId: seat.seatId, status: 'reserved', userId, showtimeId });
-        io.to(`user_${userId}`).emit('booking_updated', { bookingId: userBooking._id, seats: userBooking.seats, expiresIn: reservationTimeMinutes * 60 });
+        io.to(`event_${eventId}_showtime_${showtimeId}`).emit('seat_updated', {
+          seatId: seat.seatId,
+          status: 'reserved',
+          userId,
+        });
+        io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
       }
 
       return res.status(200).json({
         message: "Chọn ghế thành công.",
-        bookingId: userBooking._id,
-        expiresIn: reservationTimeMinutes * 60,
-        currentSeats: userBooking.seats,
+        expiresIn: reservationTimeSeconds,
+        seatId: seat.seatId,
       });
     }
-    // END: Logic for 'select' action
 
-    // START: Logic for 'deselect' action
     if (action === 'deselect') {
-      const userBooking = await SeatBookingModel.findOne({
-        userId,
-        eventId,
-        showtimeId,
-        status: 'reserved',
+      const booking = await SeatBookingModel.findOne({
+        userId, eventId, showtimeId, status: 'reserved',
       });
 
-      if (!userBooking || !userBooking.seats.some(s => s.seatId === seat.seatId)) {
-        return res.status(400).json({ message: "Ghế chưa được chọn hoặc không tồn tại trong booking hiện tại." });
+      if (!booking || !booking.seats.some(s => s.seatId === seat.seatId)) {
+        return res.status(400).json({ message: "Ghế không tồn tại trong booking." });
       }
 
-      // Remove the seat from the booking
-      userBooking.seats = userBooking.seats.filter(s => s.seatId !== seat.seatId);
-      
-      // Release the Redis lock
-      await redisClient.del(seatKey);
-      
-      if (io) {
-        io.to(`event_${eventId}`).emit('seat_updated', { seatId: seat.seatId, status: 'available', userId: null, showtimeId });
-      }
-
-      if (userBooking.seats.length === 0) {
-        // If no seats are left, delete the booking document
-        await SeatBookingModel.findByIdAndDelete(userBooking._id);
-        if (io) {
-          io.to(`user_${userId}`).emit('booking_cleared', { bookingId: userBooking._id });
-        }
-        return res.status(200).json({ message: "Bỏ chọn ghế thành công và booking đã được xóa." });
+      // Cập nhật booking
+      const updatedSeats = booking.seats.filter(s => s.seatId !== seat.seatId);
+      if (updatedSeats.length === 0) {
+        await SeatBookingModel.deleteOne({ _id: booking._id });
       } else {
-        // If seats remain, update the booking's expiration time
-        userBooking.expiresAt = new Date(Date.now() + reservationTimeMinutes * 60 * 1000);
-        await userBooking.save();
-        if (io) {
-          io.to(`user_${userId}`).emit('booking_updated', { bookingId: userBooking._id, seats: userBooking.seats, expiresIn: reservationTimeMinutes * 60 });
-        }
-        return res.status(200).json({
-          message: "Bỏ chọn ghế thành công.",
-          bookingId: userBooking._id,
-          expiresIn: reservationTimeMinutes * 60,
-          currentSeats: userBooking.seats,
-        });
+        await SeatBookingModel.updateOne(
+          { _id: booking._id },
+          {
+            $set: {
+              seats: updatedSeats,
+              expiresAt: new Date(Date.now() + reservationTimeSeconds * 1000),
+            }
+          }
+        );
       }
+
+      // Xóa Redis lock
+      const currentLocker = await redisClient.get(seatKey);
+      if (currentLocker === userId) {
+        await redisClient.del(seatKey);
+      }
+
+      if (io) {
+        io.to(`event_${eventId}_showtime_${showtimeId}`).emit('seat_updated', {
+          seatId: seat.seatId,
+          status: 'available',
+        });
+        io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
+      }
+
+      return res.status(200).json({
+        message: "Bỏ chọn ghế thành công.",
+        seatId: seat.seatId,
+      });
     }
-    // END: Logic for 'deselect' action
 
   } catch (error) {
-    console.error("Lỗi khi xử lý ghế:", error);
-    // Ensure Redis lock is released on error if it was acquired by this user
-    const lockValue = await redisClient.get(seatKey);
-    if (lockValue === userId) {
+    console.error("Lỗi reserveSeats:", error);
+    const lockOwner = await redisClient.get(seatKey);
+    if (lockOwner === userId) {
       await redisClient.del(seatKey);
     }
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 };
+
 

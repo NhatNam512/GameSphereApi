@@ -133,6 +133,7 @@ exports.reserveTickets = async (req, res) => {
 
     const io = getSocketIO(); 
     io.to(`event_${showtimeId}`).emit('zone_tickets_reserved', { zoneId, quantity, userId, expiresIn: reservationTimeMinutes * 60 });
+    io.to(`event_${showtimeId}`).emit('zone_data_changed', { showtimeId });
 
     res.status(200).json({ message: "Giữ vé thành công.", bookingId: newBooking._id, expiresIn: reservationTimeMinutes * 60 });
 
@@ -183,6 +184,7 @@ exports.bookReservedTickets = async (req, res) => {
     const io = getSocketIO();
     if(io) {
         io.to(`event_${booking.showtimeId}`).emit('zone_tickets_booked', { zoneId: booking.zoneId, quantity: booking.quantity, userId: booking.userId });
+        io.to(`event_${booking.showtimeId}`).emit('zone_data_changed', { showtimeId: booking.showtimeId });
     }
 
     res.status(200).json({ message: "Đặt vé thành công.", bookingId: booking._id });
