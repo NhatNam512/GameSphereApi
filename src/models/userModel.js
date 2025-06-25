@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const schema = mongoose.Schema;
+const oid = schema.ObjectId;
 
 const users = new schema({
     email: { type: String, required: true },
