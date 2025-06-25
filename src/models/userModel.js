@@ -7,7 +7,7 @@ const users = new schema({
     username: { type: String },
     follower: { type: Number, default: 0 },
     picUrl: { type: String },
-    tags: { type: [String], default: [] },
+    tags: { type: [oid], ref: 'tags',default: [] },
     role: { type: Number },
     longitude: { type: Number },
     latitude: { type: Number },

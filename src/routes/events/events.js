@@ -17,6 +17,8 @@ const showtimeModel = require('../../models/events/showtimeModel');
 const zoneModel = require('../../models/events/zoneModel');
 const seatBookingModel = require('../../models/events/seatBookingModel');
 const zoneBookingModel = require('../../models/events/zoneBookingModel');
+const tagModel = require('../../models/events/tagModel');
+const { default: slugify } = require('slugify');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -286,6 +288,26 @@ router.post("/add", async function (req, res, next) {
       showtimes
     } = req.body;
 
+    // ===== 🏷️ Xử lý TAGS ===== //
+    const tagIds = [];
+    for (let tagName of tags) {
+      tagName = tagName.trim();
+      if (!tagName) continue;
+
+      const slug = slugify(tagName, { lower: true, strict: true });
+      let tag = await tagModel.findOne({ slug }).session(session);
+      if (!tag) {
+        tag = await tagModel.create([{
+          name: tagName,
+          slug,
+          createdBy: userId,
+          isDefault: false
+        }], { session });
+        tag = tag[0]; // Vì dùng create([])
+      }
+      tagIds.push(tag._id);
+    }
+
     // 1. Tạo event
     const [newEvent] = await eventModel.create([
       {
@@ -298,7 +320,7 @@ router.post("/add", async function (req, res, next) {
         location,
         rating,
         userId,
-        tags,
+        tags: tagIds,
         typeBase: typeBase,
         timeStart,
         timeEnd,
