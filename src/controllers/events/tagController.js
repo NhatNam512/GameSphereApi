@@ -1,5 +1,6 @@
 const Event = require('../../models/events/eventModel');
 const Tag = require('../../models/events/tagModel');
+const { default: slugify } = require('slugify');
 
 exports.addTagsToEvent = async (req, res) => {
   try {
@@ -19,8 +20,9 @@ exports.addTagsToEvent = async (req, res) => {
 exports.suggestTags = async (req, res) => {
   try {
     const search = req.query.search || '';
-    const tags = await Tag.find({ name: { $regex: search, $options: 'i' } })
-      .sort({ name: 1 })
+    const slugSearch = slugify(search, { lower: true, strict: true });
+    const tags = await Tag.find({ slug: { $regex: slugSearch, $options: 'i' } })
+      .sort({ slug: 1 })
       .limit(20);
     res.json(tags.map(tag => tag.name));
   } catch (err) {

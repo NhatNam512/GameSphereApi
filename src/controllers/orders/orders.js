@@ -185,25 +185,29 @@ exports.createTicket = async (req, res) => {
             return res.status(400).json({ success: false, message: "Sự kiện đã kết thúc." });
         }
 
-        // Kiểm tra số lượng vé còn lại của suất chiếu chỉ khi là zone hoặc none
-        console.log('Event type:', event.typeBase);
-        const currentSoldTickets = showtime.soldTickets || 0;
-        const orderAmount = parseInt(order.amount) || 0;
-        const ticketQuantity = showtime.ticketQuantity || 0;
-
-        console.log('Current values:', {
-            currentSoldTickets,
-            orderAmount,
-            ticketQuantity,
-            showtimeId: showtime._id,
-            bookingType: order.bookingType
-        });
-
-        // Chỉ kiểm tra số lượng vé còn lại cho zone và none
-        if ((event.typeBase === 'zone' || event.typeBase === 'none') && 
-            currentSoldTickets + orderAmount > ticketQuantity) {
-            await session.abortTransaction();
-            return res.status(400).json({ success: false, message: "Không đủ vé cho suất chiếu này." });
+        // Kiểm tra số lượng vé còn lại
+        if (event.typeBase === 'zone' && zoneBooking) {
+            // Lấy zoneTicket tương ứng
+            const zoneTicket = await ZoneTicket.findById(zoneBooking.zoneId).session(session);
+            if (!zoneTicket) {
+                await session.abortTransaction();
+                return res.status(400).json({ success: false, message: "Không tìm thấy zoneTicket." });
+            }
+            // Đếm số vé đã bán cho zone này (tổng số lượng ticket đã issued cho zoneId này và showtimeId này)
+            const soldZoneTickets = await Ticket.countDocuments({
+                'zone.zoneId': zoneBooking.zoneId,
+                showtimeId: zoneBooking.showtimeId
+            }).session(session);
+            if (soldZoneTickets + zoneBooking.quantity > zoneTicket.totalTicketCount) {
+                await session.abortTransaction();
+                return res.status(400).json({ success: false, message: "Không đủ vé cho zone này." });
+            }
+        } else if (event.typeBase === 'none') {
+            // Kiểm tra số lượng vé còn lại theo showtime
+            if (showtime.soldTickets + order.amount > showtime.ticketQuantity) {
+                await session.abortTransaction();
+                return res.status(400).json({ success: false, message: "Không đủ vé cho suất chiếu này." });
+            }
         }
 
         try {
@@ -212,7 +216,7 @@ exports.createTicket = async (req, res) => {
             const updatedShowtime = await showtimeModel.findByIdAndUpdate(
                 showtime._id,
                 { 
-                    $inc: { soldTickets: orderAmount } 
+                    $inc: { soldTickets: order.amount } 
                 },
                 { 
                     session,
@@ -226,9 +230,9 @@ exports.createTicket = async (req, res) => {
             if (!updatedShowtime) {
                 console.error('Failed to update showtime:', {
                     showtimeId: showtime._id,
-                    currentSoldTickets,
-                    orderAmount,
-                    ticketQuantity
+                    currentSoldTickets: showtime.soldTickets,
+                    orderAmount: order.amount,
+                    ticketQuantity: showtime.ticketQuantity
                 });
                 await session.abortTransaction();
                 return res.status(400).json({ success: false, message: "Không thể cập nhật số lượng vé đã bán." });
@@ -236,9 +240,9 @@ exports.createTicket = async (req, res) => {
 
             console.log('Successfully updated showtime:', {
                 showtimeId: updatedShowtime._id,
-                oldSoldTickets: currentSoldTickets,
+                oldSoldTickets: showtime.soldTickets,
                 newSoldTickets: updatedShowtime.soldTickets,
-                orderAmount
+                orderAmount: order.amount
             });
         } catch (error) {
             console.error('Error updating showtime:', error);
