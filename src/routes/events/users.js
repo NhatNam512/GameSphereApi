@@ -14,6 +14,7 @@ const authenticate = require('../../middlewares/auth');
 const Event = require("../../models/events/eventModel");
 const forgotPasswordController = require('../../controllers/auth/forgotPasswordController');
 const { getEvents } = require('../../controllers/organizer/getEvents');
+const { getEvent2 } = require('../../controllers/organizer/getEvent2');
 const { googleLogin } = require('../../controllers/auth/authController');
 const { default: slugify } = require('slugify');
 const tagModel = require('../../models/events/tagModel');
@@ -305,6 +306,7 @@ router.post('/getNotification', async function (req, res) {
 });
 
 router.get("/eventOfOrganization", authenticate, getEvents);
+router.get("/eventOfOrganization2", authenticate, getEvent2);
 
 router.post('/forgotPassword/request', forgotPasswordController.requestForgotPassword);
 
