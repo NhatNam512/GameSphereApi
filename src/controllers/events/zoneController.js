@@ -157,10 +157,7 @@ exports.reserveSeats = async (req, res) => {
         return res.status(409).json({ message: `Ghế ${seat.seatId} đã được đặt.` });
       }
 
-      const lock = await redisClient.set(seatKey, userId, {
-        NX: true,
-        EX: reservationTimeSeconds,
-      });
+      const lock = await redisClient.set(seatKey, userId, 'NX', 'EX', reservationTimeSeconds);
 
       const currentLocker = await redisClient.get(seatKey);
       if (!lock && currentLocker !== userId) {
