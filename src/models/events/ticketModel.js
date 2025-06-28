@@ -13,7 +13,7 @@ const ticket = new schema({
     showtimeId: {type: oid, ref: "showtimes"},
     seat: {
         seatId: { type: String },
-        type: {string: String}
+        label: {string: String}
     },
     zone: {
         zoneId: { type: oid, ref: 'zonetickets' },

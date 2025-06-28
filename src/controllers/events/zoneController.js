@@ -186,10 +186,16 @@ exports.reserveSeats = async (req, res) => {
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
       }
 
+      // Lấy lại booking mới nhất của user cho event/showtime này
+      const booking = await SeatBookingModel.findOne({
+        userId, eventId, showtimeId, status: 'reserved',
+      });
+
       return res.status(200).json({
         message: "Chọn ghế thành công.",
+        bookingId: booking?._id,
         expiresIn: reservationTimeSeconds,
-        seatId: seat.seatId,
+        currentSeats: booking?.seats || []
       });
     }
 
@@ -232,9 +238,15 @@ exports.reserveSeats = async (req, res) => {
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
       }
 
+      // Lấy lại booking mới nhất (có thể null nếu đã xóa hết ghế)
+      const updatedBooking = await SeatBookingModel.findOne({
+        userId, eventId, showtimeId, status: 'reserved',
+      });
+
       return res.status(200).json({
         message: "Bỏ chọn ghế thành công.",
         seatId: seat.seatId,
+        currentSeats: updatedBooking?.seats || []
       });
     }
 

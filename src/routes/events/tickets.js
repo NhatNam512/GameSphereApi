@@ -8,6 +8,7 @@ const User = require('../../models/userModel');
 const ZoneTicket = require('../../models/events/zoneTicketModel');
 const ZoneModel = require('../../models/events/zoneModel');
 const Showtime = require('../../models/events/showtimeModel');
+const mongoose = require('mongoose');
 
 router.get("/all", async function (req, res) {
     try{
@@ -28,32 +29,58 @@ router.get("/getTicket/:userId", async function (req, res) {
         const userId = req.params.userId
         //Lấy thông tin người dùng
         const user = await User.findOne({_id: userId})
+            .select('_id username email phoneNumber picUrl address')
+            .lean();
         if(!user) return res.status(404).json({error: "Not Found User"});
 
         //Lấy vé của user
         const tickets = await Ticket.find({ userId: userId })
-                                    .populate('showtimeId') // Populate showtime details
-                                    .lean();
+            .select('_id ticketId userId eventId showtimeId seat zone ticketNumber status createdAt qrCode')
+            .populate('showtimeId', '_id startTime endTime') // Populate showtime details
+            .lean();
         if(!tickets) return res.status(404).json({error: "Not Found Ticket"});
         //Lấy danh sách eventId duy nhất
         const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
         //Lấy thông tin sự kiện 
-        const events = await Event.find({_id: {$in: eventIds}}).lean();
+        const events = await Event.find({_id: {$in: eventIds}})
+            .select('_id name avatar location typeBase')
+            .lean();
+
         //Gộp dữ liệu
         const result = {
-            user,
+            user: {
+                _id: user._id,
+                username: user.username,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                picUrl: user.picUrl,
+                address: user.address
+            },
             events: events.map(event => {
-                const filteredTickets = tickets.filter(t => {
-                    return t.eventId.toString() === event._id.toString();
-                });
+                const filteredTickets = tickets.filter(t => t.eventId.toString() === event._id.toString());
                 return {
-                    ...event,
+                    _id: event._id,
+                    name: event.name,
+                    avatar: event.avatar,
+                    location: event.location,
+                    typeBase: event.typeBase,
                     tickets: filteredTickets.map(ticket => ({
-                        ...ticket,
-                        showtimeStartTime: ticket.showtimeId ? ticket.showtimeId.startTime : null
+                        _id: ticket._id,
+                        ticketId: ticket.ticketId,
+                        showtimeId: ticket.showtimeId ? {
+                            _id: ticket.showtimeId._id,
+                            startTime: ticket.showtimeId.startTime,
+                            endTime: ticket.showtimeId.endTime
+                        } : null,
+                        seat: ticket.seat || undefined,
+                        zone: ticket.zone || undefined,
+                        ticketNumber: ticket.ticketNumber,
+                        status: ticket.status,
+                        createdAt: ticket.createdAt,
+                        qrCode: ticket.qrCode
                     }))
                 };
-            }),
+            })
         }
         res.status(200).json({
             status: true,
@@ -62,7 +89,7 @@ router.get("/getTicket/:userId", async function (req, res) {
         })
     }
     catch(e){
-        res.status(404).json({ status: false, message: "Not Found" })
+        res.status(404).json({ status: false, message: "Not Found" + e})
     }
 });
 
@@ -75,7 +102,8 @@ router.post("/verify-ticket", async (req, res) => {
         return res.status(400).json({ success: false, message: "Thiếu mã vé." });
       }
   
-      const ticket = await Ticket.findOne({ ticketId });
+      const ticket = await Ticket.findOne({ ticketId })
+        .select('_id ticketId userId eventId status usedAt');
   
       if (!ticket) {
         return res.status(404).json({ success: false, message: "Không tìm thấy vé." });
@@ -118,15 +146,18 @@ router.get('/attendees/:eventId', async function (req, res) {
 
     // Lấy tất cả vé đã issued hoặc used cho event này
     const tickets = await Ticket.find({ eventId, status: { $in: ['issued', 'used'] } })
-      .populate('userId')
-      .populate('showtimeId')
+      .select('_id ticketId userId eventId showtimeId seat zone status usedAt')
+      .populate('userId', '_id username email phoneNumber')
+      .populate('showtimeId', '_id startTime')
       .lean();
 
     // Lấy thông tin zone ticket (nếu có)
     const zoneTicketIds = tickets.map(t => t.zone && t.zone.zoneId).filter(Boolean);
     let zoneTicketMap = {};
     if (zoneTicketIds.length > 0) {
-      const zoneTickets = await ZoneTicket.find({ _id: { $in: zoneTicketIds } }).lean();
+      const zoneTickets = await ZoneTicket.find({ _id: { $in: zoneTicketIds } })
+        .select('_id name')
+        .lean();
       zoneTicketMap = Object.fromEntries(zoneTickets.map(z => [z._id.toString(), z]));
     }
     // Lấy thông tin zone (cho vé ghế)
@@ -136,7 +167,9 @@ router.get('/attendees/:eventId', async function (req, res) {
     });
     let seatZoneMap = {};
     if (seatZoneIds.length > 0) {
-      const seatZones = await ZoneModel.find({ _id: { $in: seatZoneIds } }).lean();
+      const seatZones = await ZoneModel.find({ _id: { $in: seatZoneIds } })
+        .select('_id name')
+        .lean();
       seatZoneMap = Object.fromEntries(seatZones.map(z => [z._id.toString(), z]));
     }
 
