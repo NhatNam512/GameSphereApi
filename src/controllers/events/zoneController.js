@@ -8,7 +8,7 @@ const zoneBookingModel = require("../../models/events/zoneBookingModel")
 
 exports.createZone = async (req, res) => {
   try {
-    const {userId} = req.user.id;
+    const userId = req.user.id;
     const {name, rows, cols, seats} = req.body;
     if( !rows || !cols || !seats) {
       return res.status(400).json({message: "Thiếu thông tin tạo vùng."});
@@ -259,5 +259,42 @@ exports.reserveSeats = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+
+exports.cancelAllReservedSeats = async (req, res) => {
+  const userId = req.user.id;
+  if (!userId) {
+    return res.status(400).json({ message: "Thiếu userId." });
+  }
+  try {
+    // Tìm tất cả booking reserved của user này
+    const bookings = await SeatBookingModel.find({
+      userId, status: 'reserved',
+    });
+    if (!bookings.length) {
+      return res.status(200).json({ message: "Không có ghế nào đang giữ." });
+    }
+    const io = getSocketIO();
+    for (const booking of bookings) {
+      const { eventId, showtimeId } = booking;
+      for (const seat of booking.seats) {
+        const seatKey = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
+        const currentLocker = await redisClient.get(seatKey);
+        if (currentLocker === userId) {
+          await redisClient.del(seatKey);
+        }
+      }
+      await SeatBookingModel.deleteOne({ _id: booking._id });
+      if (io) {
+        io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
+      }
+    }
+    return res.status(200).json({ message: "Đã hủy tất cả ghế đang giữ cho user." });
+  } catch (error) {
+    console.error("Lỗi cancelAllReservedSeats:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+
 
 

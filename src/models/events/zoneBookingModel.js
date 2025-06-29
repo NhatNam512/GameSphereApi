@@ -31,7 +31,7 @@ const zoneBookingSchema = new mongoose.Schema({
     enum: ['reserved', 'booked', 'cancelled'],
     required: true,
   },
-  expireAt: {
+  expiresAt: {
     type: Date,
     default: null,
   },
@@ -39,6 +39,7 @@ const zoneBookingSchema = new mongoose.Schema({
 zoneBookingSchema.index({ zoneId: 1, status: 1, expiresAt: 1 });
 zoneBookingSchema.index({ userId: 1, zoneId: 1, status: 1 }); // dùng để kiểm tra đã giữ vé chưa
 zoneBookingSchema.index({ eventId: 1 });
+zoneBookingSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { status: 'reserved', expiresAt: { $type: 'date' } } });
 const ZoneBooking = mongoose.model('ZoneBooking', zoneBookingSchema);
 
 module.exports = ZoneBooking; 

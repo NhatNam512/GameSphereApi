@@ -18,6 +18,7 @@ const { getEvent2 } = require('../../controllers/organizer/getEvent2');
 const { googleLogin } = require('../../controllers/auth/authController');
 const { default: slugify } = require('slugify');
 const tagModel = require('../../models/events/tagModel');
+const { cancelAllReservedSeats } = require('../../controllers/events/zoneController');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -379,5 +380,7 @@ router.get("/getUser/:id", async function (req, res) {
     res.status(400).json({ status: false, message: "Error" + e });
   }
 });
+
+router.post('/cancelAllReservedSeats', authenticate, cancelAllReservedSeats);
 module.exports = router;
 

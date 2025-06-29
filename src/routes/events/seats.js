@@ -1,6 +1,6 @@
 var express = require('express');
 const authenticate = require('../../middlewares/auth');
-const { reserveSeats, createZone } = require('../../controllers/events/zoneController');
+const { reserveSeats, createZone, cancelAllReservedSeats } = require('../../controllers/events/zoneController');
 const { createZoneTicket, reserveTickets } = require('../../controllers/events/zoneTicketController');
 const router = express.Router();
 
