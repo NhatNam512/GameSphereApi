@@ -586,18 +586,53 @@ router.put("/edit", async function (req, res, next) {
 router.get("/search", async function (req, res) {
   try {
     const { query } = req.query;
+    // Use the same fields as /home
     const events = await eventModel.find({
       $or: [
         { name: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } }
       ]
-    });
+    })
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
+      .lean();
 
-    if (events.length > 0) {
+    // Map and enrich events as in /home
+    const mappedEvents = await Promise.all(events.map(async (ev) => {
+      if (ev.location_map && ev.location_map.coordinates) {
+        ev.longitude = ev.location_map.coordinates[0];
+        ev.latitude = ev.location_map.coordinates[1];
+      }
+      let ticketPrices = [];
+      if (ev.typeBase === 'seat') {
+        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
+        zones.forEach(zone => {
+          if (zone && zone.layout && zone.layout.seats) {
+            const currentZonePrices = zone.layout.seats.map(seat => seat.price).filter(price => price !== undefined && price !== null);
+            ticketPrices.push(...currentZonePrices);
+          }
+        });
+      } else if (ev.typeBase === 'zone') {
+        const zoneTickets = await zoneTicketModel.find({ eventId: ev._id }).select('price');
+        ticketPrices = zoneTickets.map(t => t.price).filter(price => price !== undefined && price !== null);
+      } else if (ev.typeBase === 'none') {
+        const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
+        ticketPrices = showtimes.map(st => st.ticketPrice).filter(price => price !== undefined && price !== null);
+      }
+      if (ticketPrices.length > 0) {
+        ev.minTicketPrice = Math.min(...ticketPrices);
+        ev.maxTicketPrice = Math.max(...ticketPrices);
+      } else {
+        ev.minTicketPrice = null;
+        ev.maxTicketPrice = null;
+      }
+      return ev;
+    }));
+
+    if (mappedEvents.length > 0) {
       res.status(200).json({
         status: true,
         message: "Tìm kiếm sự kiện thành công",
-        data: events
+        data: mappedEvents
       });
     } else {
       res.status(404).json({ status: false, message: "Không tìm thấy sự kiện" });
