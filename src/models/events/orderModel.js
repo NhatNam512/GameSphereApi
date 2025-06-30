@@ -9,12 +9,7 @@ const order = new schema({
     totalPrice: {type: Number},
     showtimeId: {type: oid, ref: "showtimes"},
     status: {type: String, enum: ["pending", "paid", "failed"], default: "pending"},
-    seats: [{
-        seatId: { type: String,},
-        zoneId: { type: oid, ref: 'zones' }
-    }],
-    zoneId: {type: oid, ref: "zonetickets"},
-    bookingId: {type: oid, ref: "seatbookings"},
+    bookingIds: [{ type: oid }],
     bookingType: {type: String, enum: ["seat", "zone", "none"], default: "none"},
     createdAt: { type: Date, default: Date.now },
 });

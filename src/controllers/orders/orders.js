@@ -18,7 +18,7 @@ exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const { userId, eventId, showtimeId, amount, bookingId, bookingType, totalPrice } = req.body;
+        const { userId, eventId, showtimeId, bookingIds, bookingType, totalPrice } = req.body;
 
         // Validate bookingType
         const validTypes = ['none', 'seat', 'zone'];
@@ -27,83 +27,63 @@ exports.createOrder = async (req, res) => {
         }
 
         // Validate chung
-        if (!userId || !eventId || !showtimeId || !amount || amount < 1 || !totalPrice || totalPrice < 0) {
-            return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc số lượng vé/tổng tiền không hợp lệ." });
+        if (!userId || !eventId || !showtimeId || !Array.isArray(bookingIds) || bookingIds.length === 0 || !totalPrice || totalPrice < 0) {
+            return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc dữ liệu không hợp lệ." });
         }
 
-        // Kiểm tra trùng lặp order theo bookingId (nếu có)
-        if (bookingId) {
-            const existedOrder = await orderModel.findOne({ bookingId });
-            if (existedOrder) {
-                return res.status(400).json({ success: false, message: "Đơn hàng cho booking này đã tồn tại." });
-            }
-        }
-
-        let newOrder = {
-            userId,
-            eventId,
-            showtimeId,
-            amount,
-            status: "pending",
-            bookingType,
-            totalPrice
-        };
-
-        // Validate and check ticket quantity based on showtime
+        // Lấy showtime
         const showtime = await showtimeModel.findById(showtimeId);
         if (!showtime) {
             return res.status(400).json({ success: false, message: "Không tìm thấy suất chiếu." });
         }
 
-        if (bookingType === 'none') {
-            // Kiểm tra số lượng vé còn lại theo showtime
-            if (showtime.soldTickets + amount > showtime.ticketQuantity) {
-                return res.status(400).json({ success: false, message: "Không đủ vé suất chiếu." });
+        let totalAmount = 0;
+        const validBookings = [];
+        for (const bId of bookingIds) {
+            // Thử tìm booking ghế
+            let seatBooking = await seatModel.findById(bId);
+            if (seatBooking && seatBooking.userId.toString() === userId.toString() && seatBooking.status === 'reserved') {
+                // Kiểm tra số lượng vé còn lại theo showtime
+                if (showtime.soldTickets + seatBooking.seats.length > showtime.ticketQuantity) {
+                    return res.status(400).json({ success: false, message: "Không đủ vé suất chiếu cho số lượng ghế đã giữ." });
+                }
+                totalAmount += seatBooking.seats.length;
+                validBookings.push({ type: 'seat', booking: seatBooking });
+                continue;
             }
+            // Thử tìm booking zone
+            let zoneBooking = await ZoneBooking.findById(bId);
+            if (zoneBooking && zoneBooking.userId.toString() === userId.toString() && zoneBooking.status === 'reserved') {
+                if (showtime.soldTickets + zoneBooking.quantity > showtime.ticketQuantity) {
+                    return res.status(400).json({ success: false, message: "Không đủ vé suất chiếu cho số lượng khu vực đã giữ." });
+                }
+                totalAmount += zoneBooking.quantity;
+                validBookings.push({ type: 'zone', booking: zoneBooking });
+                continue;
+            }
+            return res.status(400).json({ success: false, message: `Thông tin giữ vé không hợp lệ hoặc đã hết hạn cho bookingId: ${bId}` });
         }
 
-        if (bookingType === 'seat') {
-            const seatBooking = await seatModel.findById(bookingId);
-            if (!seatBooking || seatBooking.userId.toString() !== userId || seatBooking.status !== 'reserved') {
-                return res.status(400).json({ success: false, message: "Thông tin giữ chỗ ghế không hợp lệ hoặc đã hết hạn." });
-            }
-            // Kiểm tra số lượng vé còn lại theo showtime
-            if (showtime.soldTickets + seatBooking.seats.length > showtime.ticketQuantity) {
-                return res.status(400).json({ success: false, message: "Không đủ vé suất chiếu cho số lượng ghế đã giữ." });
-            }
-            newOrder.amount = seatBooking.seats.length;
-            newOrder.seats = seatBooking.seats;
-            newOrder.bookingId = bookingId;
-            newOrder.showtimeId = seatBooking.showtimeId;
-        }
-
-        if (bookingType === 'zone') {
-            const zoneBooking = await ZoneBooking.findById(bookingId);
-            if (!zoneBooking || zoneBooking.userId.toString() !== userId.toString() || zoneBooking.status !== 'reserved') {
-                return res.status(400).json({ success: false, message: "Thông tin giữ vé không hợp lệ hoặc đã hết hạn." });
-            }
-            // Kiểm tra số lượng vé còn lại theo showtime
-            if (showtime.soldTickets + zoneBooking.quantity > showtime.ticketQuantity) {
-                return res.status(400).json({ success: false, message: "Không đủ vé suất chiếu cho số lượng khu vực đã giữ." });
-            }
-            newOrder.amount = zoneBooking.quantity;
-            newOrder.zoneId = zoneBooking.zoneId;
-            newOrder.bookingId = bookingId;
-            newOrder.showtimeId = zoneBooking.showtimeId;
-        }
-
-        // Tạo order và cập nhật booking trong transaction
+        // Tạo order
+        const newOrder = {
+            userId,
+            eventId,
+            showtimeId,
+            amount: totalAmount,
+            status: "pending",
+            bookingType,
+            totalPrice,
+            bookingIds
+        };
         const createdOrder = await orderModel.create([newOrder], { session });
-        if (bookingType === 'seat') {
-            await seatModel.findByIdAndUpdate(bookingId, { orderId: createdOrder[0]._id }, { session });
+        // Gán orderId cho từng booking và chuyển trạng thái sang 'booked'
+        for (const { type, booking } of validBookings) {
+            booking.orderId = createdOrder[0]._id;
+            booking.status = 'booked';
+            await booking.save({ session });
         }
-        if (bookingType === 'zone') {
-            await ZoneBooking.findByIdAndUpdate(bookingId, { orderId: createdOrder[0]._id }, { session });
-        }
-
         await session.commitTransaction();
         session.endSession();
-
         return res.status(200).json({
             success: true,
             message: "Tạo đơn hàng thành công.",
@@ -112,7 +92,6 @@ exports.createOrder = async (req, res) => {
     } catch (e) {
         await session.abortTransaction();
         session.endSession();
-        console.error(e);
         return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo đơn hàng." });
     }
 }
@@ -130,8 +109,6 @@ exports.createTicket = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     let order = null;
-    let seatBooking = null;
-    let zoneBooking = null;
     try {
         // Validate đầu vào
         const schema = Joi.object({
@@ -142,31 +119,12 @@ exports.createTicket = async (req, res) => {
         if (error) {
             return res.status(400).json({ success: false, message: error.details[0].message });
         }
-
         const { orderId, paymentId } = req.body;
         order = await orderModel.findById(orderId).session(session);
-
         if (!order) {
             await session.abortTransaction();
             return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng." });
         }
-
-        // Tìm booking ghế hoặc khu vực nếu có
-        if (order.bookingType === 'seat' && order.bookingId) {
-            seatBooking = await seatModel.findById(order.bookingId).session(session);
-            if (!seatBooking || seatBooking.status !== 'reserved') {
-                await session.abortTransaction();
-                return res.status(400).json({ success: false, message: "Thông tin giữ chỗ ghế không hợp lệ hoặc đã hết hạn." });
-            }
-        }
-        if (order.bookingType === 'zone' && order.bookingId) {
-            zoneBooking = await ZoneBooking.findById(order.bookingId).session(session);
-            if (!zoneBooking || zoneBooking.status !== 'reserved') {
-                await session.abortTransaction();
-                return res.status(400).json({ success: false, message: "Thông tin giữ vé khu vực không hợp lệ hoặc đã hết hạn." });
-            }
-        }
-
         // Tìm user, event và showtime
         const [user, event, showtime] = await Promise.all([
             userModel.findById(order.userId).session(session),
@@ -177,182 +135,116 @@ exports.createTicket = async (req, res) => {
             await session.abortTransaction();
             return res.status(404).json({ success: false, message: "Không tìm thấy người dùng, sự kiện hoặc suất chiếu liên quan đến đơn hàng." });
         }
-
         if (order.status !== "pending") {
             return res.status(400).json({ success: false, message: `Đơn hàng đã được xử lý (${order.status}).` });
         }
         if (event.endDate < new Date()) {
             return res.status(400).json({ success: false, message: "Sự kiện đã kết thúc." });
         }
-
-        // Kiểm tra số lượng vé còn lại
-        if (event.typeBase === 'zone' && zoneBooking) {
-            // Lấy zoneTicket tương ứng
-            const zoneTicket = await ZoneTicket.findById(zoneBooking.zoneId).session(session);
-            if (!zoneTicket) {
-                await session.abortTransaction();
-                return res.status(400).json({ success: false, message: "Không tìm thấy zoneTicket." });
-            }
-            // Đếm số vé đã bán cho zone này (tổng số lượng ticket đã issued cho zoneId này và showtimeId này)
-            const soldZoneTickets = await Ticket.countDocuments({
-                'zone.zoneId': zoneBooking.zoneId,
-                showtimeId: zoneBooking.showtimeId
-            }).session(session);
-            if (soldZoneTickets + zoneBooking.quantity > zoneTicket.totalTicketCount) {
-                await session.abortTransaction();
-                return res.status(400).json({ success: false, message: "Không đủ vé cho zone này." });
-            }
-        } else if (event.typeBase === 'none') {
-            // Kiểm tra số lượng vé còn lại theo showtime
-            if (showtime.soldTickets + order.amount > showtime.ticketQuantity) {
-                await session.abortTransaction();
-                return res.status(400).json({ success: false, message: "Không đủ vé cho suất chiếu này." });
-            }
-        }
-
-        try {
-            console.log('Attempting to update showtime...');
-            // Cập nhật số vé đã bán cho suất chiếu (cho tất cả các loại booking)
-            const updatedShowtime = await showtimeModel.findByIdAndUpdate(
-                showtime._id,
-                { 
-                    $inc: { soldTickets: order.amount } 
-                },
-                { 
-                    session,
-                    new: true,
-                    runValidators: true
+        // Sinh vé cho từng bookingId
+        let totalTickets = 0;
+        const ticketsToInsert = [];
+        for (const bId of order.bookingIds) {
+            // Thử tìm booking ghế
+            let seatBooking = await seatModel.findById(bId).session(session);
+            if (seatBooking && seatBooking.status === 'booked') {
+                for (const seat of seatBooking.seats) {
+                    const ticketNumber = await generateTicketNumber();
+                    const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+                    const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
+                    ticketsToInsert.push({
+                        orderId: order._id,
+                        userId: order.userId,
+                        eventId: order.eventId,
+                        showtimeId: order.showtimeId,
+                        amount: 1,
+                        totalPrice: order.totalPrice / order.amount,
+                        status: "issued",
+                        createdAt: new Date(),
+                        ticketId,
+                        ticketNumber,
+                        qrCode,
+                        seat: { seatId: seat.seatId, zoneId: seat.zoneId }
+                    });
+                    totalTickets++;
                 }
-            );
-
-            console.log('Update result:', updatedShowtime);
-
-            if (!updatedShowtime) {
-                console.error('Failed to update showtime:', {
-                    showtimeId: showtime._id,
-                    currentSoldTickets: showtime.soldTickets,
-                    orderAmount: order.amount,
-                    ticketQuantity: showtime.ticketQuantity
-                });
-                await session.abortTransaction();
-                return res.status(400).json({ success: false, message: "Không thể cập nhật số lượng vé đã bán." });
+                // Cập nhật trạng thái giữ chỗ ghế thành 'booked' (nếu cần)
+                seatBooking.status = 'booked';
+                await seatBooking.save({ session });
+                continue;
             }
-
-            console.log('Successfully updated showtime:', {
-                showtimeId: updatedShowtime._id,
-                oldSoldTickets: showtime.soldTickets,
-                newSoldTickets: updatedShowtime.soldTickets,
-                orderAmount: order.amount
-            });
-        } catch (error) {
-            console.error('Error updating showtime:', error);
+            // Thử tìm booking zone
+            let zoneBooking = await ZoneBooking.findById(bId).session(session);
+            if (zoneBooking && zoneBooking.status === 'booked') {
+                const zone = await ZoneTicket.findById(zoneBooking.zoneId);
+                // Đếm số vé đã bán cho zone này
+                const soldZoneTickets = await Ticket.countDocuments({
+                    'zone.zoneId': zoneBooking.zoneId,
+                    showtimeId: zoneBooking.showtimeId
+                }).session(session);
+                if (soldZoneTickets + zoneBooking.quantity > zone.totalTicketCount) {
+                    await session.abortTransaction();
+                    return res.status(400).json({ success: false, message: `Không đủ vé cho zone này (zoneId: ${zoneBooking.zoneId}).` });
+                }
+                for (let i = 0; i < zoneBooking.quantity; i++) {
+                    const ticketNumber = await generateTicketNumber();
+                    const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
+                    const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
+                    ticketsToInsert.push({
+                        orderId: order._id,
+                        userId: order.userId,
+                        eventId: order.eventId,
+                        showtimeId: order.showtimeId,
+                        amount: 1,
+                        totalPrice: order.totalPrice / order.amount,
+                        status: "issued",
+                        createdAt: new Date(),
+                        ticketId,
+                        ticketNumber,
+                        qrCode,
+                        zone: { zoneId: zone._id, zoneName: zone.name }
+                    });
+                    totalTickets++;
+                }
+                // Cập nhật trạng thái giữ vé khu vực thành 'booked' (nếu cần)
+                zoneBooking.status = 'booked';
+                await zoneBooking.save({ session });
+                // Xóa Redis lock nếu có
+                const redisKey = `zoneReserve:${zoneBooking.zoneId}:${zoneBooking.userId}`;
+                await redisClient.del(redisKey);
+                continue;
+            }
             await session.abortTransaction();
-            return res.status(500).json({ success: false, message: "Lỗi khi cập nhật số lượng vé đã bán: " + error.message });
+            return res.status(400).json({ success: false, message: `Thông tin giữ vé không hợp lệ hoặc đã hết hạn cho bookingId: ${bId}` });
         }
-
+        // Cập nhật số vé đã bán cho suất chiếu
+        const updatedShowtime = await showtimeModel.findByIdAndUpdate(
+            showtime._id,
+            { $inc: { soldTickets: totalTickets } },
+            { session, new: true, runValidators: true }
+        );
+        if (!updatedShowtime) {
+            await session.abortTransaction();
+            return res.status(400).json({ success: false, message: "Không thể cập nhật số lượng vé đã bán." });
+        }
         // Cập nhật trạng thái đơn hàng
         const updatedOrder = await orderModel.updateOne(
-            { _id: orderId, status: "pending", bookingId: order.bookingId },
+            { _id: orderId, status: "pending" },
             { $set: { status: "paid" } },
             { session }
         );
         if (updatedOrder.modifiedCount === 0) {
             await session.abortTransaction();
-            return res.status(400).json({ success: false, message: "Đơn hàng đã được xử lý bởi tiến trình khác hoặc bookingId không khớp." });
+            return res.status(400).json({ success: false, message: "Đơn hàng đã được xử lý bởi tiến trình khác." });
         }
-
         // Tạo vé
-        const ticketsToInsert = [];
-        const baseTicketData = {
-            orderId: order._id,
-            userId: order.userId,
-            eventId: order.eventId,
-            showtimeId: order.showtimeId,
-            amount: 1,
-            totalPrice: order.totalPrice / order.amount,
-            status: "issued",
-            createdAt: new Date()
-        };
-
-        if (order.bookingType === 'seat' && order.seats?.length > 0) {
-            for (const seat of order.seats) {
-                const ticketNumber = await generateTicketNumber();
-                const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
-                const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                ticketsToInsert.push({
-                    ...baseTicketData,
-                    ticketId,
-                    ticketNumber,
-                    qrCode,
-                    seat: { seatId: seat.seatId, zoneId: seat.zoneId }
-                });
-            }
-        } else if (order.bookingType === 'zone' && zoneBooking) {
-            for (let i = 0; i < zoneBooking.quantity; i++) {
-                const ticketNumber = await generateTicketNumber();
-                const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
-                const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                const zone = await ZoneTicket.findById(zoneBooking.zoneId);
-                ticketsToInsert.push({
-                    ...baseTicketData,
-                    ticketId,
-                    ticketNumber,
-                    qrCode,
-                    zone: { zoneId: zone._id, zoneName: zone.name }
-                });
-            }
-        } else if (order.bookingType === 'none') {
-            for (let i = 0; i < order.amount; i++) {
-                const ticketNumber = await generateTicketNumber();
-                const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
-                const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                ticketsToInsert.push({
-                    ...baseTicketData,
-                    ticketId,
-                    ticketNumber,
-                    qrCode
-                });
-            }
-        } else {
-            await session.abortTransaction();
-            return res.status(400).json({ success: false, message: "Đơn hàng không có thông tin ghế hoặc khu vực." });
-        }
-
         const createdTickets = await Ticket.insertMany(ticketsToInsert, { session });
-
-        // Cập nhật trạng thái giữ chỗ ghế/khu vực thành 'booked'
-        if (seatBooking) {
-            seatBooking.status = 'booked';
-            await seatBooking.save({ session });
-        }
-        if (zoneBooking) {
-            zoneBooking.status = 'booked';
-            await zoneBooking.save({ session });
-        }
-
-        // Xóa Redis lock nếu có (tuỳ vào cách bạn lock zone)
-        if (zoneBooking) {
-            const redisKey = `zoneReserve:${zoneBooking.zoneId}:${zoneBooking.userId}`;
-            await redisClient.del(redisKey);
-        }
-
-        // Gửi thông báo
-        // await notificationService.sendTicketNotification(user, event.name, event.avatar, event._id, order);
-        // await sendNotificationCore(user.fcmTokens, "Đặt vé thành công", `Bạn đã đặt ${order.amount} vé cho sự kiện "${event.name}"`, {
-        //     eventId: event._id,
-        // }, "ticket", {
-        //     eventName: event.name,
-        //     eventId: event._id,
-        //     orderId: order._id,
-        //     amount: order.amount,
-        //     bookingType: order.bookingType,
-        // });
+        // Xóa cache Redis chi tiết sự kiện
+        await redisClient.del(`events_detail_${order.eventId}`);
         await session.commitTransaction();
         return res.status(200).json({ success: true, data: createdTickets });
-
     } catch (e) {
         await session.abortTransaction();
-        // ... giữ nguyên phần xử lý lỗi ...
         return res.status(500).json({ success: false, message: "Lỗi hệ thống khi tạo vé." + e});
     } finally {
         session.endSession();

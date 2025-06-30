@@ -80,115 +80,137 @@ exports.getZonesTicket = async (req, res) => {
   }
 };
 
-// Function to reserve a quantity of tickets for a zone
+// Function to reserve a quantity of tickets for multiple zones
 exports.reserveTickets = async (req, res) => {
   try {
-    const { showtimeId, zoneId, quantity } = req.body;
+    const { showtimeId, zones } = req.body;
     const userId = req.user.id;
 
     // Basic validation
-    if (!showtimeId || !zoneId || !quantity || quantity <= 0) {
-      return res.status(400).json({ message: "Thiếu thông tin giữ vé (showtimeId, zoneId, quantity > 0)." });
+    if (!showtimeId || !Array.isArray(zones) || zones.length === 0) {
+      return res.status(400).json({ message: "Thiếu thông tin giữ vé (showtimeId, zones)." });
     }
 
-    // Find the zone ticket details
-    const zone = await zoneTicketModel.findOne({ _id: zoneId, showtimeId });
-    if (!zone) {
-      return res.status(404).json({ message: "Không tìm thấy khu vực vé." });
-    }
-
-    const bookedAndReservedBookings = await zoneBookingModel.find({
-      zoneId,
-      showtimeId,
-      $or: [
-        { status: 'booked' },
-        { status: 'reserved', expiresAt: { $gt: new Date() } }
-      ]
-    });
-    
-    const bookedAndReservedCount = bookedAndReservedBookings.reduce((acc, booking) => acc + booking.quantity, 0);
-
-    // Calculate available tickets
-    const availableCount = zone.totalTicketCount - bookedAndReservedCount;
-
-    // Check if enough tickets are available
-    if (quantity > availableCount) {
-      return res.status(409).json({ message: "Không đủ vé trong khu vực này.", available: availableCount });
-    }
-
-    // Create a new reserved booking entry
+    // Prepare to collect errors and successful reservations
+    const errors = [];
+    const reservations = [];
     const reservationTimeMinutes = 10; // Example reservation time: 10 minutes
     const expiresAt = new Date(Date.now() + reservationTimeMinutes * 60 * 1000);
 
-    const newBooking = await zoneBookingModel.create({
-      showtimeId,
-      zoneId,
-      userId,
-      quantity,
-      status: 'reserved',
-      expiresAt,
-    });
+    for (const { zoneId, quantity } of zones) {
+      if (!zoneId || !quantity || quantity <= 0) {
+        errors.push({ zoneId, message: "Thiếu thông tin hoặc số lượng không hợp lệ cho zone." });
+        continue;
+      }
+      // Find the zone ticket details
+      const zone = await zoneTicketModel.findOne({ _id: zoneId, showtimeId });
+      if (!zone) {
+        errors.push({ zoneId, message: "Không tìm thấy khu vực vé." });
+        continue;
+      }
+      const bookedAndReservedBookings = await zoneBookingModel.find({
+        zoneId,
+        showtimeId,
+        $or: [
+          { status: 'booked' },
+          { status: 'reserved', expiresAt: { $gt: new Date() } }
+        ]
+      });
+      const bookedAndReservedCount = bookedAndReservedBookings.reduce((acc, booking) => acc + booking.quantity, 0);
+      const availableCount = zone.totalTicketCount - bookedAndReservedCount;
+      if (quantity > availableCount) {
+        errors.push({ zoneId, message: "Không đủ vé trong khu vực này.", available: availableCount });
+        continue;
+      }
+      // Create a new reserved booking entry
+      const newBooking = await zoneBookingModel.create({
+        showtimeId,
+        zoneId,
+        userId,
+        quantity,
+        status: 'reserved',
+        expiresAt,
+      });
+      await redisClient.set(`zoneReserve:${zoneId}:${userId}`, quantity, 'EX', reservationTimeMinutes * 60);
+      reservations.push({ zoneId, bookingId: newBooking._id, expiresIn: reservationTimeMinutes * 60 });
+    }
 
-    await redisClient.set(`zoneReserve:${zoneId}:${userId}`, quantity, 'EX', reservationTimeMinutes * 60);
+    const io = getSocketIO();
+    if (io) {
+      for (const r of reservations) {
+        io.to(`event_${showtimeId}`).emit('zone_tickets_reserved', { zoneId: r.zoneId, quantity: zones.find(z => z.zoneId === r.zoneId)?.quantity, userId, expiresIn: reservationTimeMinutes * 60 });
+      }
+      io.to(`event_${showtimeId}`).emit('zone_data_changed', { showtimeId });
+    }
 
-    const io = getSocketIO(); 
-    io.to(`event_${showtimeId}`).emit('zone_tickets_reserved', { zoneId, quantity, userId, expiresIn: reservationTimeMinutes * 60 });
-    io.to(`event_${showtimeId}`).emit('zone_data_changed', { showtimeId });
+    if (reservations.length === 0) {
+      return res.status(409).json({ message: "Không thể giữ vé cho bất kỳ khu vực nào.", errors });
+    }
 
-    res.status(200).json({ message: "Giữ vé thành công.", bookingId: newBooking._id, expiresIn: reservationTimeMinutes * 60 });
-
+    res.status(200).json({ message: "Giữ vé thành công cho các khu vực hợp lệ.", reservations, errors });
   } catch (error) {
     console.error("Lỗi khi giữ vé:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
+// Function to book reserved tickets for multiple zones
 exports.bookReservedTickets = async (req, res) => {
   try {
-    const { bookingId, bookingDetails } = req.body; // Assuming bookingId is passed to identify the reservation
-    const userId = req.user.id; // Assuming user info is available
+    const { bookings } = req.body; // bookings: [{ bookingId }]
+    const userId = req.user.id;
 
-    // Basic validation
-    if (!bookingId) {
-      return res.status(400).json({ message: "Thiếu thông tin xác nhận đặt vé (bookingId)." });
+    if (!Array.isArray(bookings) || bookings.length === 0) {
+      return res.status(400).json({ message: "Thiếu thông tin xác nhận đặt vé (bookings)." });
     }
 
-    // Find the reserved booking
-    const booking = await zoneBookingModel.findOne({
-      _id: bookingId,
-      userId: userId, // Ensure the booking belongs to the requesting user
-      status: 'reserved',
-    });
-
-    if (!booking) {
-      // Check if the booking exists but is already booked or cancelled
-      const existingBooking = await zoneBookingModel.findById(bookingId);
-      if (existingBooking) {
-        if (existingBooking.status === 'booked') {
-          return res.status(409).json({ message: "Đặt vé này đã được xác nhận trước đó." });
-        } else if (existingBooking.status === 'cancelled') {
-           return res.status(409).json({ message: "Đặt vé này đã bị hủy." });
-        }
-      }
-      return res.status(404).json({ message: "Không tìm thấy thông tin giữ vé tạm thời hoặc đã hết hạn." });
-    }
-
-    // Update booking status to booked
-    booking.status = 'booked';
-
-    await booking.save();
-
-    const redisKey = `zoneReserve:${booking.zoneId}:${userId}`; 
-    await redisClient.del(redisKey);
-
+    const results = [];
+    const errors = [];
     const io = getSocketIO();
-    if(io) {
+
+    for (const { bookingId } of bookings) {
+      if (!bookingId) {
+        errors.push({ bookingId, message: "Thiếu bookingId." });
+        continue;
+      }
+      // Find the reserved booking
+      const booking = await zoneBookingModel.findOne({
+        _id: bookingId,
+        userId: userId,
+        status: 'reserved',
+      });
+      if (!booking) {
+        // Check if the booking exists but is already booked or cancelled
+        const existingBooking = await zoneBookingModel.findById(bookingId);
+        if (existingBooking) {
+          if (existingBooking.status === 'booked') {
+            errors.push({ bookingId, message: "Đặt vé này đã được xác nhận trước đó." });
+            continue;
+          } else if (existingBooking.status === 'cancelled') {
+            errors.push({ bookingId, message: "Đặt vé này đã bị hủy." });
+            continue;
+          }
+        }
+        errors.push({ bookingId, message: "Không tìm thấy thông tin giữ vé tạm thời hoặc đã hết hạn." });
+        continue;
+      }
+      // Update booking status to booked
+      booking.status = 'booked';
+      await booking.save();
+      const redisKey = `zoneReserve:${booking.zoneId}:${userId}`;
+      await redisClient.del(redisKey);
+      if (io) {
         io.to(`event_${booking.showtimeId}`).emit('zone_tickets_booked', { zoneId: booking.zoneId, quantity: booking.quantity, userId: booking.userId });
         io.to(`event_${booking.showtimeId}`).emit('zone_data_changed', { showtimeId: booking.showtimeId });
+      }
+      results.push({ bookingId: booking._id, zoneId: booking.zoneId });
     }
 
-    res.status(200).json({ message: "Đặt vé thành công.", bookingId: booking._id });
+    if (results.length === 0) {
+      return res.status(409).json({ message: "Không thể xác nhận đặt vé cho bất kỳ booking nào.", errors });
+    }
 
+    res.status(200).json({ message: "Đặt vé thành công cho các booking hợp lệ.", results, errors });
   } catch (error) {
     console.error("Lỗi khi xác nhận đặt vé:", error);
     res.status(500).json({ error: error.message });
