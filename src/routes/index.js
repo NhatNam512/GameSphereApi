@@ -13,6 +13,7 @@ const interactionRouter = require('./events/interactions');
 const friendRouter = require('./users/friends');
 const zoneRouter = require('./events/seats');
 const tagRoutes = require('./events/tags');
+const groupRouter = require('./groups');
 
 var gamesRouter = require('./games/games');
 var categoriesGamesRouter = require('./games/categoriesGames');
@@ -33,5 +34,6 @@ router.use("/interactions", interactionRouter);
 router.use("/friends", friendRouter);
 router.use("/zones", zoneRouter);
 router.use('/tags', tagRoutes);
+router.use('/connects', groupRouter);
 
 module.exports = router;
