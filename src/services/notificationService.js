@@ -65,6 +65,75 @@ class NotificationService {
             "ticket"
         );
     }
+
+    async sendGroupInviteNotification(receiver, group, inviter) {
+        const tokens = receiver?.fcmTokens || [];
+        if (tokens.length === 0) return;
+        return sendUserNotification(
+            tokens,
+            "Lời mời tham gia nhóm",
+            `${inviter?.username || 'Một người dùng'} đã mời bạn vào nhóm "${group.groupName}"`,
+            {
+                groupId: group._id,
+                groupName: group.groupName,
+                eventId: group.eventId,
+                inviterId: inviter?._id,
+                inviterName: inviter?.username
+            },
+            "group"
+        );
+    }
+
+    async sendGroupAcceptNotification(owner, user, group) {
+        const tokens = owner?.fcmTokens || [];
+        if (tokens.length === 0) return;
+        return sendUserNotification(
+            tokens,
+            "Thành viên mới tham gia nhóm",
+            `${user.username} đã chấp nhận lời mời vào nhóm "${group.groupName}"`,
+            {
+                groupId: group._id,
+                groupName: group.groupName,
+                userId: user._id,
+                username: user.username
+            },
+            "group"
+        );
+    }
+
+    async sendGroupDeclineNotification(owner, user, group) {
+        const tokens = owner?.fcmTokens || [];
+        if (tokens.length === 0) return;
+        return sendUserNotification(
+            tokens,
+            "Từ chối lời mời nhóm",
+            `${user.username} đã từ chối lời mời vào nhóm "${group.groupName}"`,
+            {
+                groupId: group._id,
+                groupName: group.groupName,
+                userId: user._id,
+                username: user.username
+            },
+            "group"
+        );
+    }
+
+    async sendGroupLeaveNotification(owner, user, group) {
+        const tokens = owner?.fcmTokens || [];
+        if (tokens.length === 0) return;
+        return sendUserNotification(
+            tokens,
+            "Thành viên rời nhóm",
+            `${user.username} đã rời khỏi nhóm "${group.groupName}"`,
+            {
+                groupId: group._id,
+                groupName: group.groupName,
+                userId: user._id,
+                username: user.username
+            },
+            "group"
+        );
+    }
 }
 
 module.exports = new NotificationService();

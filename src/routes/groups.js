@@ -10,5 +10,10 @@ router.get('/:groupId/members', groupController.getMembers);
 router.post('/:groupId/location', groupController.updateLocation);
 router.get('/:groupId/locations', groupController.getLocations);
 router.get('/searchUser', groupController.searchUserByEmailOrPhone);
+router.post('/:groupId/decline', groupController.declineInvite);
+router.post('/:groupId/leave', groupController.leaveGroup);
+router.delete('/:groupId', groupController.deleteGroup);
+router.get('/by-event/:eventId', groupController.getGroupsByEvent);
+router.get('/by-user/:userId', groupController.getGroupsByUser);
 
 module.exports = router; 

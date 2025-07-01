@@ -2,6 +2,7 @@ const Group = require('../../models/events/groupModel');
 const GroupLocation = require('../../models/events/groupLocationModel');
 const userModel = require('../../models/userModel');
 const notificationService = require('../../services/notificationService');
+const { getSocketIO } = require('../../../socket/socket');
 
 exports.createGroup = async (req, res) => {
   try {
@@ -16,7 +17,7 @@ exports.createGroup = async (req, res) => {
         await notificationService.sendGroupInvite(memberId, group._id, groupName, eventId);
       }
     }
-    res.status(201).json({ groupId: group._id, ...group.toObject() });
+    res.status(201).json(group.toObject());
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -33,14 +34,15 @@ exports.inviteMember = async (req, res) => {
     if (group.inviteEmails.some(inv => inv.email === email)) {
       return res.status(400).json({ message: 'Email đã được mời.' });
     }
-    group.inviteEmails.push({ email, invitedBy: req.user?._id });
+    const inviteObj = { email, invitedBy: req.user?._id };
+    group.inviteEmails.push(inviteObj);
     await group.save();
     // Nếu user đã đăng ký, gửi notification
     const user = await userModel.findOne({ email });
     if (user && notificationService?.sendGroupInvite) {
       await notificationService.sendGroupInvite(user._id, groupId, group.groupName, group.eventId);
     }
-    res.json({ success: true });
+    res.json({ success: true, invite: { ...inviteObj, status: 'pending' } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -81,6 +83,69 @@ exports.acceptInvite = async (req, res) => {
   }
 };
 
+exports.declineInvite = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { userId } = req.body;
+    const group = await Group.findById(groupId);
+    if (!group) return res.status(404).json({ message: 'Không tìm thấy group.' });
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Không tìm thấy user.' });
+    // Tìm invite
+    const invite = group.inviteEmails.find(inv => inv.email === user.email);
+    if (!invite) return res.status(400).json({ message: 'Không tìm thấy lời mời.' });
+    invite.status = 'declined';
+    await group.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.leaveGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { userId } = req.body;
+    const group = await Group.findById(groupId);
+    if (!group) return res.status(404).json({ message: 'Không tìm thấy group.' });
+    group.memberIds = group.memberIds.filter(id => id.toString() !== userId);
+    await group.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    await Group.findByIdAndDelete(groupId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getGroupsByEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const groups = await Group.find({ eventId });
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getGroupsByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const groups = await Group.find({ memberIds: userId });
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 exports.getMembers = async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -99,12 +164,16 @@ exports.updateLocation = async (req, res) => {
     if (!userId || latitude == null || longitude == null) {
       return res.status(400).json({ message: 'Thiếu thông tin vị trí.' });
     }
-    await GroupLocation.findOneAndUpdate(
+    const location = await GroupLocation.findOneAndUpdate(
       { groupId, userId },
       { latitude, longitude, updatedAt: new Date() },
       { upsert: true, new: true }
     );
-    // TODO: Emit socket event location:update nếu có socket
+    // Emit socket event location:update nếu có socket
+    const io = getSocketIO && getSocketIO();
+    if (io) {
+      io.to(`group_${groupId}`).emit('location:update', { groupId, userId, latitude, longitude, updatedAt: location.updatedAt });
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -125,12 +194,15 @@ exports.searchUserByEmailOrPhone = async (req, res) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ status: false, message: 'Thiếu từ khóa tìm kiếm.' });
-    const users = await userModel.find({
-      $or: [
-        { email: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } }
-      ]
-    }).select('_id name email phone avatar');
+
+    let query = {};
+    if (q.includes('@')) {
+      query.email = q.trim().toLowerCase();
+    } else {
+      query.phone = q.trim();
+    }
+
+    const users = await userModel.find(query).select('_id username email phone picUrl');
     if (users.length === 0) {
       return res.status(404).json({ status: false, message: 'Không tìm thấy người dùng.' });
     }
