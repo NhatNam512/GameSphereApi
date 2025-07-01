@@ -1,6 +1,6 @@
 var express = require('express');
 const authenticate = require('../../middlewares/auth');
-const { searchUsers, sendFriendRequest, getPendingRequests, acceptFriendRequest, declineFriendRequest, getFriendsList, unfriend } = require('../../controllers/friend/friendController');
+const { searchUsers, sendFriendRequest, getPendingRequests, acceptFriendRequest, declineFriendRequest, getFriendsList, unfriend, searchUserByEmailOrPhone } = require('../../controllers/friend/friendController');
 const { inviteFriendsToEvent, acceptInviteToEvent, declineInviteToEvent, getPendingEventInvites, getFriendsToInvite, getEventParticipants, getJoinedEvents, joinEvent, unjoinEvent } = require('../../controllers/friend/inviteFriendController');
 var router = express.Router();
 
@@ -38,5 +38,7 @@ router.get("/invites/friends", authenticate, getFriendsToInvite);
 router.get("/participants/:eventId", authenticate, getEventParticipants);
 
 router.get("/joined", authenticate, getJoinedEvents);
+
+router.get('/search', searchUserByEmailOrPhone);
 
 module.exports = router;

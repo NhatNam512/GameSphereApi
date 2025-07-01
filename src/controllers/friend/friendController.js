@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('../../utils/logger');
 const friendshipModel = require('../../models/user/friendshipModel');
 const { getSocketIO } = require('../../../socket/socket');
+const userModel = require('../../models/userModel');
 
 // Rate limiting middleware
 exports.friendRequestLimiter = rateLimit({
@@ -315,5 +316,24 @@ exports.checkFriendship = async (req, res) => {
     const isFriend = await friendshipModel.exists({ user1: uid1, user2: uid2 });
 
     return res.status(200).json({ isFriend: !!isFriend });
+};
+
+exports.searchUserByEmailOrPhone = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ status: false, message: 'Thiếu từ khóa tìm kiếm.' });
+    const users = await userModel.find({
+      $or: [
+        { email: { $regex: q, $options: 'i' } },
+        { phone: { $regex: q, $options: 'i' } }
+      ]
+    }).select('_id name email phone avatar');
+    if (users.length === 0) {
+      return res.status(404).json({ status: false, message: 'Không tìm thấy người dùng.' });
+    }
+    res.json({ status: true, data: users });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi hệ thống.' });
+  }
 };
 

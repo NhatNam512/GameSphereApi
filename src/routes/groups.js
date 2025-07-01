@@ -9,5 +9,6 @@ router.post('/:groupId/accept', groupController.acceptInvite);
 router.get('/:groupId/members', groupController.getMembers);
 router.post('/:groupId/location', groupController.updateLocation);
 router.get('/:groupId/locations', groupController.getLocations);
+router.get('/searchUser', groupController.searchUserByEmailOrPhone);
 
 module.exports = router; 

@@ -119,4 +119,23 @@ exports.getLocations = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+};
+
+exports.searchUserByEmailOrPhone = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ status: false, message: 'Thiếu từ khóa tìm kiếm.' });
+    const users = await userModel.find({
+      $or: [
+        { email: { $regex: q, $options: 'i' } },
+        { phone: { $regex: q, $options: 'i' } }
+      ]
+    }).select('_id name email phone avatar');
+    if (users.length === 0) {
+      return res.status(404).json({ status: false, message: 'Không tìm thấy người dùng.' });
+    }
+    res.json({ status: true, data: users });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi hệ thống.' });
+  }
 }; 
