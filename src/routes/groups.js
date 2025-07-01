@@ -15,5 +15,6 @@ router.post('/:groupId/leave', groupController.leaveGroup);
 router.delete('/:groupId', groupController.deleteGroup);
 router.get('/by-event/:eventId', groupController.getGroupsByEvent);
 router.get('/by-user/:userId', groupController.getGroupsByUser);
+router.get('/user/:userId/groups', groupController.getGroupsByUser);
 
 module.exports = router; 
