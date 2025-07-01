@@ -230,4 +230,24 @@ router.get('/attendees/:eventId', async function (req, res) {
   }
 });
 
+router.get('/user/:userId/events', async function (req, res) {
+  try {
+    const { userId } = req.params;
+    // Lấy tất cả vé của user
+    const tickets = await Ticket.find({ userId }).select('eventId').lean();
+    if (!tickets.length) {
+      return res.status(200).json({ status: true, message: 'Người dùng chưa mua vé sự kiện nào', data: [] });
+    }
+    // Lấy danh sách eventId duy nhất
+    const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
+    // Lấy thông tin sự kiện
+    const events = await Event.find({ _id: { $in: eventIds } })
+      .select('_id name avatar location typeBase timeStart timeEnd')
+      .lean();
+    res.status(200).json({ status: true, message: 'Lấy danh sách sự kiện đã mua vé thành công', data: events });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
+  }
+});
+
 module.exports = router;
