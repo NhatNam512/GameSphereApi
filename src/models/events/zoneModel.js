@@ -15,6 +15,7 @@ const zoneSchema = new schema({
                 label: {type: String},
                 price: {type: Number},
                 area: {type: String},
+                color: {type: String},
             }
         ]
     },

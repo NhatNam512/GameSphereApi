@@ -18,7 +18,8 @@ exports.createZone = async (req, res) => {
       layout: {
         rows: rows,
         cols: cols,
-        seats: seats
+        seats: seats,
+        color: color,
       },
       createdBy: userId,
       updatedBy: userId,
