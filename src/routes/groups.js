@@ -16,5 +16,6 @@ router.delete('/:groupId', groupController.deleteGroup);
 router.get('/by-event/:eventId', groupController.getGroupsByEvent);
 router.get('/by-user/:userId', groupController.getGroupsByUser);
 router.get('/user/:userId/groups', groupController.getGroupsByUser);
+router.get('/invited/:userId', groupController.getGroupInvitesForUser);
 
 module.exports = router; 

@@ -7,7 +7,7 @@ async function saveNotifications(fcmToken, title, body, data = {}, type) {
     // Tìm user theo FCM token
     const user = await User.findOne({ fcmTokens: fcmToken });
     if (!user) {
-      console.log('⚠️ Không tìm thấy user với FCM Token này.');
+      console.log(`[Notification] Không tìm thấy user với FCM Token: ${fcmToken}`);
       return;
     }
     const hash = crypto.createHash('md5').update(`${user._id}-${title}-${body}-${type}`).digest('hex');
@@ -17,7 +17,7 @@ async function saveNotifications(fcmToken, title, body, data = {}, type) {
       createdAt: { $gte: new Date(Date.now() - 1000 * 60 * 1) }// trong 1 phút gần nhất
     });
     if (isDuplicate) {
-      console.log('Trùng thông báo, không lưu lại.');
+      console.log(`[Notification] Trùng thông báo, không lưu lại. userId: ${user._id}, title: ${title}, type: ${type}`);
       return;
     }
     // Tạo notification mới
@@ -32,7 +32,7 @@ async function saveNotifications(fcmToken, title, body, data = {}, type) {
     });
 
     await newNoti.save();
-    console.log('Notification saved to database');
+    console.log(`[Notification] Notification saved to database for userId: ${user._id}, title: ${title}, type: ${type}`);
 
     // Gửi socket tới đúng user
     const io = getSocketIO();
@@ -42,7 +42,7 @@ async function saveNotifications(fcmToken, title, body, data = {}, type) {
     });
 
   } catch (error) {
-    console.error('Error save notification:', error.message);
+    console.error('[Notification] Error save notification:', error.message);
   }
 }
 

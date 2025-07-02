@@ -12,9 +12,15 @@ exports.createGroup = async (req, res) => {
     }
     const group = await Group.create({ eventId, groupName, ownerId, memberIds: [ownerId, ...memberIds] });
     // Gửi notification cho các memberIds (trừ owner)
-    if (memberIds.length && notificationService?.sendGroupInvite) {
+    if (memberIds.length && notificationService?.sendGroupInviteNotification) {
+      const owner = await userModel.findById(ownerId);
       for (const memberId of memberIds) {
-        await notificationService.sendGroupInvite(memberId, group._id, groupName, eventId);
+        if (memberId.toString() === ownerId.toString()) continue;
+        const user = await userModel.findById(memberId);
+        console.log(user);
+        if (user) {
+          await notificationService.sendGroupInviteNotification(user, group, owner);
+        }
       }
     }
     res.status(201).json(group.toObject());
@@ -39,8 +45,9 @@ exports.inviteMember = async (req, res) => {
     await group.save();
     // Nếu user đã đăng ký, gửi notification
     const user = await userModel.findOne({ email });
-    if (user && notificationService?.sendGroupInvite) {
-      await notificationService.sendGroupInvite(user._id, groupId, group.groupName, group.eventId);
+    if (user && notificationService?.sendGroupInviteNotification) {
+      const owner = await userModel.findById(group.ownerId);
+      await notificationService.sendGroupInviteNotification(user, group, owner);
     }
     res.json({ success: true, invite: { ...inviteObj, status: 'pending' } });
   } catch (err) {
@@ -209,5 +216,37 @@ exports.searchUserByEmailOrPhone = async (req, res) => {
     res.json({ status: true, data: users });
   } catch (e) {
     res.status(500).json({ status: false, message: 'Lỗi hệ thống.' });
+  }
+};
+
+// API: Lấy danh sách group mời đến user
+exports.getGroupInvitesForUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Lấy email user
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Không tìm thấy user.' });
+    // Tìm group có inviteEmails chứa email user và status là pending
+    const groups = await Group.find({
+      inviteEmails: {
+        $elemMatch: { email: user.email, status: 'pending' }
+      }
+    }).populate('ownerId', 'username email');
+    // Lấy thông tin người mời từ từng group
+    const result = groups.map(group => {
+      const invite = group.inviteEmails.find(inv => inv.email === user.email && inv.status === 'pending');
+      return {
+        groupId: group._id,
+        groupName: group.groupName,
+        eventId: group.eventId,
+        invitedBy: invite?.invitedBy,
+        owner: group.ownerId,
+        invitedAt: invite?.invitedAt,
+        status: invite?.status
+      };
+    });
+    res.json({ success: true, invites: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 }; 

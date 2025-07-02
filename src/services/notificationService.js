@@ -67,10 +67,10 @@ class NotificationService {
     }
 
     async sendGroupInviteNotification(receiver, group, inviter) {
-        const tokens = receiver?.fcmTokens || [];
-        if (tokens.length === 0) return;
+        const token = receiver?.fcmTokens;
+        if (!token) return;
         return sendUserNotification(
-            tokens,
+            token,
             "Lời mời tham gia nhóm",
             `${inviter?.username || 'Một người dùng'} đã mời bạn vào nhóm "${group.groupName}"`,
             {

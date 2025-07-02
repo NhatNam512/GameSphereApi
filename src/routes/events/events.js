@@ -19,6 +19,8 @@ const seatBookingModel = require('../../models/events/seatBookingModel');
 const zoneBookingModel = require('../../models/events/zoneBookingModel');
 const tagModel = require('../../models/events/tagModel');
 const { default: slugify } = require('slugify');
+const revenueController = require('../../controllers/events/revenueController');
+const authMiddleware = require('../../middlewares/auth');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -642,26 +644,7 @@ router.get("/search", async function (req, res) {
   }
 });
 
-router.get("/revenue", async function (req, res) {
-  try {
-    const events = await eventModel.find({ timeStart: { $lt: new Date() } });
-    const revenueData = events.map(event => ({
-      id: event._id,
-      name: event.name,
-      soldTickets: event.soldTickets,
-      revenue: event.ticketPrice * event.soldTickets,
-      status: event.timeEnd < new Date() ? "End" : "Progress"
-    }));
-
-    res.status(200).json({
-      status: true,
-      message: "Tính doanh thu cho tất cả sự kiện thành công",
-      data: revenueData
-    });
-  } catch (e) {
-    res.status(400).json({ status: false, message: "Error: " + e });
-  }
-});
+router.get("/revenue", revenueController.getRevenue);
 
 router.post("/sort", async function (req, res) {
   try {

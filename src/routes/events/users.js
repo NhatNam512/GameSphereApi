@@ -382,5 +382,7 @@ router.get("/getUser/:id", async function (req, res) {
 });
 
 router.post('/cancelAllReservedSeats', authenticate, cancelAllReservedSeats);
+
+
 module.exports = router;
 

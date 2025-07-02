@@ -4,11 +4,23 @@ const { sendPushNotification } = require("../events/sendNotification");
 // Hàm core để gửi thông báo
 const sendNotificationCore = async (fcmToken, title, body, data = {}, type) => {
   if (!fcmToken || !title || !body || !type) {
+    console.error('[Notification] Thiếu thông tin bắt buộc:', { fcmToken, title, body, type });
     throw new Error('Thiếu thông tin bắt buộc: fcmToken, title, body, type');
   }
-
-  await sendPushNotification(fcmToken, title, body, data);
-  await saveNotifications(fcmToken, title, body, data, type);
+  try {
+    console.log(`[Notification] Sending push to token: ${fcmToken}, title: ${title}, type: ${type}`);
+    await sendPushNotification(fcmToken, title, body, data);
+    console.log(`[Notification] Push sent to ${fcmToken}`);
+  } catch (e) {
+    console.error(`[Notification] Lỗi khi gửi push notification:`, e.message);
+  }
+  try {
+    console.log(`[Notification] Saving notification to DB for token: ${fcmToken}, title: ${title}, type: ${type}`);
+    await saveNotifications(fcmToken, title, body, data, type);
+    console.log(`[Notification] Notification saved for token: ${fcmToken}`);
+  } catch (e) {
+    console.error(`[Notification] Lỗi khi lưu notification vào DB:`, e.message);
+  }
 };
 
 // API endpoint để gửi thông báo

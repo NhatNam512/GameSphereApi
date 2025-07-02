@@ -60,6 +60,23 @@ function calculateRevenueByShowtime(event, showtimes, ordersByShowtime) {
   });
 }
 
+// Helper: Group revenue by day, month, year
+function groupRevenueByDate(orders, type = 'day') {
+  // type: 'day' | 'month' | 'year'
+  const formatDate = (date) => {
+    const d = new Date(date);
+    if (type === 'year') return d.getFullYear();
+    if (type === 'month') return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    // default: day
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  return orders.reduce((acc, order) => {
+    const key = formatDate(order.createdAt);
+    acc[key] = (acc[key] || 0) + (order.totalPrice || 0);
+    return acc;
+  }, {});
+}
+
 exports.getEvents = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -78,7 +95,7 @@ exports.getEvents = async (req, res) => {
       ZoneTicket.find({ eventId: { $in: eventIds } }).lean(),
       seatBookingModel.find({ eventId: { $in: eventIds }, status: 'booked' }).select("eventId showtimeId seats").lean(),
       require('../../models/events/ticketModel').find({ eventId: { $in: eventIds }, status: { $in: ['issued', 'used'] } }).lean(),
-      require('../../models/events/orderModel').find({ eventId: { $in: eventIds }, status: 'paid' }).lean(),
+      require('../../models/events/orderModel').find({ eventId: { $in: eventIds }, status: 'paid' }).select('eventId showtimeId totalPrice createdAt').lean(),
     ]);
 
     // 3. Group lại theo eventId/showtimeId
@@ -88,6 +105,7 @@ exports.getEvents = async (req, res) => {
     const seatBookingsByShowtime = groupBy(allSeatBookings, 'showtimeId');
     const ticketsByShowtime = groupBy(allTickets, 'showtimeId');
     const ordersByShowtime = groupBy(allOrders, 'showtimeId');
+    const ordersByEvent = groupBy(allOrders, 'eventId');
 
     let totalTicketsSold = 0, totalRevenue = 0;
 
@@ -113,6 +131,12 @@ exports.getEvents = async (req, res) => {
         revenue: revenueMap[st._id?.toString()] || 0
       }));
 
+      // Doanh thu theo ngày, tháng, năm cho từng event
+      const eventOrders = ordersByEvent[event._id.toString()] || [];
+      const revenueByDay = groupRevenueByDate(eventOrders, 'day');
+      const revenueByMonth = groupRevenueByDate(eventOrders, 'month');
+      const revenueByYear = groupRevenueByDate(eventOrders, 'year');
+
       totalTicketsSold += eventSoldTickets;
       totalRevenue += eventTotalRevenue;
       return {
@@ -121,11 +145,27 @@ exports.getEvents = async (req, res) => {
         totalTicketsEvent,
         soldTickets: eventSoldTickets,
         revenueByShowtime,
-        eventTotalRevenue
+        eventTotalRevenue,
+        revenueByDay,
+        revenueByMonth,
+        revenueByYear
       };
     }));
 
-    const response = { status: 200, totalTicketsSold, totalRevenue, events: eventsWithDetails };
+    // Tổng doanh thu theo ngày, tháng, năm cho tất cả event
+    const totalRevenueByDay = groupRevenueByDate(allOrders, 'day');
+    const totalRevenueByMonth = groupRevenueByDate(allOrders, 'month');
+    const totalRevenueByYear = groupRevenueByDate(allOrders, 'year');
+
+    const response = {
+      status: 200,
+      totalTicketsSold,
+      totalRevenue,
+      events: eventsWithDetails,
+      totalRevenueByDay,
+      totalRevenueByMonth,
+      totalRevenueByYear
+    };
     await redisClient.set(cacheKey, JSON.stringify(response), 'EX', 300);
     res.status(200).json(response);
   } catch (e) {
@@ -133,3 +173,5 @@ exports.getEvents = async (req, res) => {
     res.status(400).json({ status: false, message: "Error: " + e.message });
   }
 };
+
+
