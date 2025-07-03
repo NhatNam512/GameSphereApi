@@ -209,7 +209,12 @@ exports.reserveSeats = async (req, res) => {
         return res.status(400).json({ message: "Ghế không tồn tại trong booking." });
       }
 
-      // Cập nhật booking
+      // Luôn xóa Redis lock của ghế
+      console.log('Deleting seatKey:', seatKey);
+      const delResult = await redisClient.del(seatKey);
+      console.log('Delete result:', delResult);
+
+      // Xóa ghế khỏi mảng seats
       const updatedSeats = booking.seats.filter(s => s.seatId !== seat.seatId);
       if (updatedSeats.length === 0) {
         await SeatBookingModel.deleteOne({ _id: booking._id });
@@ -223,12 +228,6 @@ exports.reserveSeats = async (req, res) => {
             }
           }
         );
-      }
-
-      // Xóa Redis lock
-      const currentLocker = await redisClient.get(seatKey);
-      if (currentLocker === userId) {
-        await redisClient.del(seatKey);
       }
 
       if (io) {
