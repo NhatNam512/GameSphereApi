@@ -223,7 +223,6 @@ router.get("/detail/:id", async function (req, res, next) {
       ticketInfo.zones = zonesWithStatus;
     } else if (detail.typeBase === 'zone') {
       // Lấy tất cả zone tickets cho event này (tất cả showtimes)
-      const zoneTicketModel = require('../../models/events/zoneTicketModel');
       const zoneTickets = await zoneTicketModel.find({ eventId: id });
       // Lấy tất cả booking cho các zone ticket này
       const zoneTicketIds = zoneTickets.map(z => z._id);
@@ -249,7 +248,14 @@ router.get("/detail/:id", async function (req, res, next) {
     }
     // Nếu typeBase === 'none' thì không cần gì thêm
 
-    const result = { ...detail.toObject(), showtimes, ...ticketInfo };
+    // Lấy tên các tag (trả về mảng tên thay vì mảng id)
+    let tagNames = [];
+    if (detail.tags && detail.tags.length > 0) {
+      const tags = await tagModel.find({ _id: { $in: detail.tags } });
+      tagNames = tags.map(tag => tag.name);
+    }
+
+    const result = { ...detail.toObject(), showtimes, ...ticketInfo, tags: tagNames };
     await redis.set(cacheKey, JSON.stringify(result), 'EX', 300);
     return res.status(200).json({
       status: true,
@@ -348,79 +354,52 @@ router.post("/add", async function (req, res, next) {
       }
     }
 
-    // 2. Nếu typeBase là 'zone' và có zones
-    const zoneTicketModel = require('../../models/events/zoneTicketModel');
-    const zoneModel = require('../../models/events/zoneModel');
-
-    if (typeBase === 'zone' && Array.isArray(zones)) {
+    // 2. Xử lý zones và showtimes theo typeBase
+    if (typeBase === 'seat' && Array.isArray(zones)) {
+      // Tạo zone với layout
       for (const zone of zones) {
-        // Tạo zone nếu có layout (nếu không có layout thì chỉ tạo zoneTicket)
-        let newZone = null;
-        if (zone.layout) {
-          [newZone] = await zoneTicketModel.create([
-            {
-              name: zone.name,
-              totalTicketCount: zone.totalTicketCount,
-              price: zone.price,
-              eventId: newEvent._id,
-              createdBy: userId,
-              updatedBy: userId
+        const [newZone] = await zoneModel.create([
+          {
+            name: zone.name,
+            layout: zone.layout,
+            eventId: newEvent._id
+          }
+        ], { session });
+        // Tạo vé cho từng seat cho mỗi showtime
+        if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
+          for (const newShowtime of createdShowtimes) {
+            const seatTickets = zone.layout.seats.map(seat => ({
+              showtimeId: newShowtime._id,
+              name: `${zone.name} - ${seat.label}`,
+              totalTicketCount: 1,
+              price: seat.price,
+              eventId: newEvent._id
+            }));
+            if (seatTickets.length > 0) {
+              await zoneTicketModel.insertMany(seatTickets, { session });
             }
-          ], { session });
+          }
         }
-        // Iterate over the pre-created event-level showtimes
+      }
+    } else if (typeBase === 'zone' && Array.isArray(zones)) {
+      // Tạo vé zoneTicket cho từng showtime và từng zone (KHÔNG tạo/cập nhật/xóa gì ở zoneModel)
+      for (const zone of zones) {
         if (createdShowtimes.length > 0) {
           for (const newShowtime of createdShowtimes) {
-            // Tạo zoneTicket cho showtime này, using zone's properties
             await zoneTicketModel.create([
               {
-                showtimeId: newShowtime._id, // Use the pre-created showtime ID
+                showtimeId: newShowtime._id,
                 name: zone.name,
-                totalTicketCount: zone.totalTicketCount, // Assumed to be on zone object
-                price: zone.price, // Assumed to be on zone object
-                eventId: newEvent._id,
-                createdBy: userId,
-                updatedBy: userId
+                totalTicketCount: zone.totalTicketCount,
+                price: zone.price,
+                eventId: newEvent._id
               }
             ], { session });
           }
         }
       }
     }
-
-    if (typeBase === 'seat' && Array.isArray(zones)) {
-      for (const zone of zones) {
-        // Tạo zone với layout
-        const [newZone] = await zoneModel.create([{
-          name: zone.name,
-          layout: zone.layout,
-          eventId: newEvent._id,
-          createdBy: userId,
-          updatedBy: userId
-        }], { session });
-
-        // Iterate over the pre-created event-level showtimes
-        if (createdShowtimes.length > 0) {
-          for (const newShowtime of createdShowtimes) {
-            // Tạo vé cho từng seat
-            if (zone.layout && Array.isArray(zone.layout.seats)) {
-              const seatTickets = zone.layout.seats.map(seat => ({
-                showtimeId: newShowtime._id, // Use the pre-created showtime ID
-                name: `${zone.name} - ${seat.label}`,
-                totalTicketCount: 1,
-                price: seat.price,
-                createdBy: userId,
-                updatedBy: userId
-                // Có thể bổ sung seatId, row, col, label... nếu muốn
-              }));
-              if (seatTickets.length > 0) {
-                await zoneTicketModel.insertMany(seatTickets, { session });
-              }
-            }
-          }
-        }
-      }
-    }
+    // typeBase 'none' chỉ tạo showtimes, không cần xử lý zone/zoneTicket
 
     await session.commitTransaction();
     session.endSession();
@@ -443,6 +422,7 @@ router.post("/add", async function (req, res, next) {
 });
 
 router.put("/edit", async function (req, res, next) {
+  console.log('--- ĐÃ VÀO ROUTE /edit ---');
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -452,6 +432,8 @@ router.put("/edit", async function (req, res, next) {
       location, rating, longitude, latitude, zone,
       typeBase, showtimes, zones
     } = req.body;
+
+    console.log('typeBase:', typeBase, 'zones:', zones, 'isArray:', Array.isArray(zones));
 
     const itemUpdate = await eventModel.findById(id).session(session);
 
@@ -506,6 +488,8 @@ router.put("/edit", async function (req, res, next) {
       }
     }
 
+    console.log('createdShowtimes:', createdShowtimes.length);
+
     // Handle typeBase change cleanup
     if (oldTypeBase && typeBase && oldTypeBase !== typeBase) {
       if (oldTypeBase === 'seat') {
@@ -518,7 +502,7 @@ router.put("/edit", async function (req, res, next) {
 
     // Handle zones based on new typeBase
     if (typeBase === 'zone' && Array.isArray(zones)) {
-      await zoneTicketModel.deleteMany({ eventId: id }).session(session); // Clear old zone tickets for zone type
+      await zoneTicketModel.deleteMany({ eventId: id }).session(session);
       for (const zone of zones) {
         if (createdShowtimes.length > 0) {
           for (const newShowtime of createdShowtimes) {
@@ -528,9 +512,7 @@ router.put("/edit", async function (req, res, next) {
                 name: zone.name,
                 totalTicketCount: zone.totalTicketCount,
                 price: zone.price,
-                eventId: id,
-                // createdBy: userId, // userId is not available in edit route, consider adding or making optional
-                // updatedBy: userId
+                eventId: id
               }
             ], { session });
           }
@@ -539,31 +521,29 @@ router.put("/edit", async function (req, res, next) {
     }
 
     if (typeBase === 'seat' && Array.isArray(zones)) {
+      console.log(`[ZONE-EDIT] Xóa tất cả zoneModel của eventId: ${id}`);
       await zoneModel.deleteMany({ eventId: id }).session(session); // Clear old zones for seat type
       await zoneTicketModel.deleteMany({ eventId: id }).session(session); // Clear old seat tickets for seat type
       for (const zone of zones) {
-        const [newZone] = await zoneModel.create([{
-          name: zone.name,
-          layout: zone.layout,
-          eventId: id,
-          // createdBy: userId,
-          // updatedBy: userId
-        }], { session });
-
-        if (createdShowtimes.length > 0) {
+        console.log(`[ZONE-EDIT] Tạo mới zoneModel cho eventId: ${id}, zone: ${zone.name}, layout:`, JSON.stringify(zone.layout));
+        const [newZone] = await zoneModel.create([
+          {
+            name: zone.name,
+            layout: zone.layout,
+            eventId: id
+          }
+        ], { session });
+        if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
           for (const newShowtime of createdShowtimes) {
-            if (zone.layout && Array.isArray(zone.layout.seats)) {
-              const seatTickets = zone.layout.seats.map(seat => ({
-                showtimeId: newShowtime._id,
-                name: `${zone.name} - ${seat.label}`,
-                totalTicketCount: 1,
-                price: seat.price,
-                // createdBy: userId,
-                // updatedBy: userId
-              }));
-              if (seatTickets.length > 0) {
-                await zoneTicketModel.insertMany(seatTickets, { session });
-              }
+            const seatTickets = zone.layout.seats.map(seat => ({
+              showtimeId: newShowtime._id,
+              name: `${zone.name} - ${seat.label}`,
+              totalTicketCount: 1,
+              price: seat.price
+            }));
+            if (seatTickets.length > 0) {
+              console.log(`[ZONETICKET-EDIT] Tạo mới ${seatTickets.length} zoneTicket cho eventId: ${id}, showtimeId: ${newShowtime._id}, zone: ${zone.name}`);
+              await zoneTicketModel.insertMany(seatTickets, { session });
             }
           }
         }
