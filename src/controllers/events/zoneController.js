@@ -184,7 +184,14 @@ exports.reserveSeats = async (req, res) => {
           status: 'reserved',
           userId,
         });
+        console.log('Socket emit: seat_updated', {
+          seatId: seat.seatId,
+          status: 'reserved',
+          userId,
+          room: `event_${eventId}_showtime_${showtimeId}`
+        });
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
+        console.log('Socket emit: zone_data_changed', { eventId, showtimeId, room: `event_${eventId}_showtime_${showtimeId}` });
       }
 
       // Lấy lại booking mới nhất của user cho event/showtime này
@@ -235,7 +242,13 @@ exports.reserveSeats = async (req, res) => {
           seatId: seat.seatId,
           status: 'available',
         });
+        console.log('Socket emit: seat_updated', {
+          seatId: seat.seatId,
+          status: 'available',
+          room: `event_${eventId}_showtime_${showtimeId}`
+        });
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
+        console.log('Socket emit: zone_data_changed', { eventId, showtimeId, room: `event_${eventId}_showtime_${showtimeId}` });
       }
 
       // Lấy lại booking mới nhất (có thể null nếu đã xóa hết ghế)
