@@ -27,7 +27,9 @@ const users = new schema({
     phoneNumber: { type: String },
     address: { type: String },
     fcmTokens: { type: String },
-    refreshToken: { type: String }
+    refreshToken: { type: String },
+    gender: {type: Number},
+    date: {type: Number},
 }, {
     timestamps: {
         createdAt: 'createAt',
