@@ -47,5 +47,6 @@ const SeatBookingSchema = new schema(
 
 SeatBookingSchema.index({ eventId: 1, userId: 1, status: 1 });
 SeatBookingSchema.index({ status: 1, expiresAt: 1 });
+SeatBookingSchema.index({ eventId: 1, showtimeId: 1, status: 1, 'seats.seatId': 1 });
 
 module.exports = mongoose.model('seatbookings', SeatBookingSchema);

@@ -192,18 +192,43 @@ router.get("/detail/:id", async function (req, res, next) {
       // Lấy tất cả các showtimeId của event này
       const showtimeIds = showtimes.map(st => st._id);
       // Lấy các booking đã đặt và đang giữ cho tất cả showtime
-      const bookedBookings = await seatBookingModel.find({ 
-        eventId: id, 
-        showtimeId: { $in: showtimeIds },
-        status: 'booked' 
-      });
-      const bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
-      const reservedBookings = await seatBookingModel.find({
-        eventId: id,
-        showtimeId: { $in: showtimeIds },
-        status: 'reserved',
-      });
-      const reservedSeatIds = reservedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+      // --- CACHE GHẾ ---
+      let bookedSeatIds = [];
+      let reservedSeatIds = [];
+      let cacheMiss = false;
+      for (const showtimeId of showtimeIds) {
+        const cacheKey = `seatStatus:${id}:${showtimeId}`;
+        const cacheData = await redis.get(cacheKey);
+        if (cacheData) {
+          const { booked, reserved } = JSON.parse(cacheData);
+          bookedSeatIds.push(...booked);
+          reservedSeatIds.push(...reserved);
+        } else {
+          cacheMiss = true;
+        }
+      }
+      if (cacheMiss) {
+        // Nếu cache miss bất kỳ showtime nào, truy vấn DB cho tất cả showtime
+        const bookedBookings = await seatBookingModel.find({ 
+          eventId: id, 
+          showtimeId: { $in: showtimeIds },
+          status: 'booked' 
+        });
+        bookedSeatIds = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+        const reservedBookings = await seatBookingModel.find({
+          eventId: id,
+          showtimeId: { $in: showtimeIds },
+          status: 'reserved',
+        });
+        reservedSeatIds = reservedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+        // Cache lại cho từng showtime
+        for (const showtimeId of showtimeIds) {
+          const booked = bookedBookings.filter(b => b.showtimeId.toString() === showtimeId.toString()).flatMap(b => b.seats.map(s => s.seatId));
+          const reserved = reservedBookings.filter(b => b.showtimeId.toString() === showtimeId.toString()).flatMap(b => b.seats.map(s => s.seatId));
+          const cacheKey = `seatStatus:${id}:${showtimeId}`;
+          await redis.set(cacheKey, JSON.stringify({ booked, reserved }), 'EX', 60); // cache 1 phút
+        }
+      }
       // Duyệt từng zone để cập nhật trạng thái ghế và đếm số ghế còn lại
       const zonesWithStatus = zones.map(zone => {
         let availableCount = 0;

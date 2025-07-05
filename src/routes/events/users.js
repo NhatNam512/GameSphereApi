@@ -228,10 +228,9 @@ router.put("/editPassword", async function (req, res) {
   }
 });
 
-router.put("/fcmToken", authenticate, async (req, res) => {
+router.put("/fcmToken", async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { fcmToken } = req.body;
+    const { id, fcmToken } = req.body;
 
     if (!fcmToken) {
       return res.status(400).json({ status: false, message: "Thiếu fcmToken" });
@@ -239,13 +238,13 @@ router.put("/fcmToken", authenticate, async (req, res) => {
 
     // Xoá token khỏi các user khác (tránh trùng)
     await userModel.updateMany(
-      { _id: { $ne: userId }, fcmTokens: fcmToken },
+      { _id: { $ne: id }, fcmTokens: fcmToken },
       { $unset: { fcmTokens: "" } }
     );
 
     // Cập nhật fcmToken mới cho user
     const user = await userModel.findByIdAndUpdate(
-      userId,
+      id,
       { fcmTokens: fcmToken },
     );
 
@@ -254,7 +253,7 @@ router.put("/fcmToken", authenticate, async (req, res) => {
     }
 
     // Lưu token vào Redis (tuỳ bạn muốn sử dụng để làm gì)
-    await redis.set(`fcm:${userId}`, fcmToken, "EX", 60 * 60 * 24 * 7); // 7 ngày
+    await redis.set(`fcm:${id}`, fcmToken, "EX", 60 * 60 * 24 * 7); // 7 ngày
 
     return res.status(200).json({ status: true, message: "Cập nhật FCM token thành công" });
   } catch (e) {
