@@ -28,8 +28,8 @@ const users = new schema({
     address: { type: String },
     fcmTokens: { type: String },
     refreshToken: { type: String },
-    gender: {type: String},
-    date: {type: Number},
+    gender: {type: Number},
+    date: {type: String},
 }, {
     timestamps: {
         createdAt: 'createAt',
