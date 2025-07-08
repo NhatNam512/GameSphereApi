@@ -32,7 +32,8 @@ exports.inviteMember = async (req, res) => {
     const { groupId } = req.params;
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: 'Thiếu email.' });
-    const group = await Group.findById(groupId);
+    // Populate eventId để lấy thông tin sự kiện
+    const group = await Group.findById(groupId).populate('eventId', 'name avatar banner timeStart timeEnd');
     if (!group) return res.status(404).json({ message: 'Không tìm thấy group.' });
     if (group.inviteEmails.some(inv => inv.email === email)) {
       return res.status(400).json({ message: 'Email đã được mời.' });
@@ -45,7 +46,16 @@ exports.inviteMember = async (req, res) => {
       const owner = await userModel.findById(group.ownerId);
       await notificationService.sendGroupInviteNotification(user, group, owner);
     }
-    res.json({ success: true, invite: { ...inviteObj, status: 'pending' } });
+    // Lấy thông tin sự kiện trả về
+    const eventInfo = group.eventId ? {
+      id: group.eventId._id,
+      name: group.eventId.name,
+      avatar: group.eventId.avatar,
+      banner: group.eventId.banner,
+      timeStart: group.eventId.timeStart,
+      timeEnd: group.eventId.timeEnd
+    } : null;
+    res.json({ success: true, invite: { ...inviteObj, status: 'pending' }, event: eventInfo });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -139,8 +149,32 @@ exports.getGroupsByEvent = async (req, res) => {
 exports.getGroupsByUser = async (req, res) => {
   try {
     const { userId } = req.params;
-    const groups = await Group.find({ memberIds: userId });
-    res.json(groups);
+    const groups = await Group.find({ memberIds: userId })
+      .populate('eventId', 'name avatar banner timeStart timeEnd')
+      .populate('ownerId', 'username email');
+    
+    // Format lại dữ liệu để trả về thông tin sự kiện
+    const formattedGroups = groups.map(group => {
+      const groupObj = group.toObject();
+      return {
+        ...groupObj,
+        event: groupObj.eventId ? {
+          id: groupObj.eventId._id,
+          name: groupObj.eventId.name,
+          avatar: groupObj.eventId.avatar,
+          banner: groupObj.eventId.banner,
+          timeStart: groupObj.eventId.timeStart,
+          timeEnd: groupObj.eventId.timeEnd
+        } : null,
+        owner: groupObj.ownerId ? {
+          id: groupObj.ownerId._id,
+          username: groupObj.ownerId.username,
+          email: groupObj.ownerId.email
+        } : null
+      };
+    });
+    
+    res.json(formattedGroups);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -149,7 +183,7 @@ exports.getGroupsByUser = async (req, res) => {
 exports.getMembers = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const group = await Group.findById(groupId).populate('memberIds', 'id name email location');
+    const group = await Group.findById(groupId).populate('memberIds', 'id username email location picUrl');
     if (!group) return res.status(404).json({ message: 'Không tìm thấy group.' });
     res.json(group.memberIds);
   } catch (err) {

@@ -4,6 +4,9 @@ const seatBookingModel = require("../../models/events/seatBookingModel");
 const zoneModel = require("../../models/events/zoneModel");
 const ZoneTicket = require("../../models/events/zoneTicketModel");
 const redisClient = require('../../redis/redisClient');
+const SeatBooking = require('../../models/events/seatBookingModel');
+const ZoneBooking = require('../../models/events/zoneBookingModel');
+const mongoose = require('mongoose');
 
 // Helper: Group array by key
 function groupBy(arr, key) {
@@ -44,18 +47,36 @@ exports.getRevenue = async (req, res) => {
     const eventIds = events.map(e => e._id);
 
     // 2. Lấy tất cả orders cho các event này
-    const allOrders = await require('../../models/events/orderModel').find({ eventId: { $in: eventIds }, status: 'paid' }).select('eventId showtimeId totalPrice createdAt').lean();
+    const allOrders = await require('../../models/events/orderModel').find({ eventId: { $in: eventIds }, status: 'paid' }).select('eventId amount totalPrice createdAt').lean();
     const ordersByEvent = groupBy(allOrders, 'eventId');
+
+    // 2.1. Lấy tổng số vé đã bán và số vé đã bán mỗi ngày từ Order
+    const soldMap = {};
+    const soldByDayMap = {};
+    allOrders.forEach(order => {
+      const key = order.eventId.toString();
+      const date = order.createdAt.toISOString().slice(0, 10); // YYYY-MM-DD
+      const amount = order.amount || 0;
+      soldMap[key] = (soldMap[key] || 0) + amount;
+      if (!soldByDayMap[key]) soldByDayMap[key] = {};
+      soldByDayMap[key][date] = (soldByDayMap[key][date] || 0) + amount;
+    });
 
     // 3. Tính doanh thu theo ngày, tháng, năm cho từng event
     const eventsRevenue = events.map(event => {
       const eventOrders = ordersByEvent[event._id.toString()] || [];
+      // Số vé đã bán tổng
+      const totalSold = soldMap[event._id.toString()] || 0;
+      // Số vé đã bán theo ngày
+      const soldByDay = soldByDayMap[event._id.toString()] || {};
       return {
         eventId: event._id,
         name: event.name,
         revenueByDay: groupRevenueByDate(eventOrders, 'day'),
         revenueByMonth: groupRevenueByDate(eventOrders, 'month'),
         revenueByYear: groupRevenueByDate(eventOrders, 'year'),
+        totalSold,
+        soldByDay
       };
     });
 

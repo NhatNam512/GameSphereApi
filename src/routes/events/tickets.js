@@ -9,6 +9,7 @@ const ZoneTicket = require('../../models/events/zoneTicketModel');
 const ZoneModel = require('../../models/events/zoneModel');
 const Showtime = require('../../models/events/showtimeModel');
 const mongoose = require('mongoose');
+const ticketController = require('../../controllers/events/ticketController');
 
 router.get("/all", async function (req, res) {
     try{
@@ -249,5 +250,7 @@ router.get('/user/:userId/events', async function (req, res) {
     res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
   }
 });
+
+router.get('/all-tickets/:eventId', ticketController.getAllTicketsByEvent);
 
 module.exports = router;

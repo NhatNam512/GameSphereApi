@@ -4,6 +4,7 @@ const JWT = require('jsonwebtoken');
 const config = require("../../utils/tokenConfig");
 const orderModel = require('../../models/events/orderModel');
 const { createOrder, createTicket } = require('../../controllers/orders/orders');
+const ordersController = require('../../controllers/events/orders');
 
 router.get("/getOrders", async function (req, res) {
     try {
@@ -23,5 +24,6 @@ router.get("/getOrders", async function (req, res) {
 
 router.post("/createOrder", createOrder);
 router.post("/createTicket", createTicket);
+router.get('/buyers/:eventId', ordersController.getBuyersByEvent);
 
 module.exports = router;

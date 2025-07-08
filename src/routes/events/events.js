@@ -447,7 +447,6 @@ router.post("/add", async function (req, res, next) {
 });
 
 router.put("/edit", async function (req, res, next) {
-  console.log('--- ĐÃ VÀO ROUTE /edit ---');
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
