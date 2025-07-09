@@ -63,6 +63,16 @@ exports.getZones = async (req, res)=>{
       const cacheData = await redisClient.get(cacheKey);
       if (cacheData) {
         ({ booked = [], reserved = [] } = JSON.parse(cacheData));
+      } else {
+        // Nếu cache miss, fallback truy vấn lại toàn bộ
+        const [bookedBookings, reservedBookings] = await Promise.all([
+          SeatBookingModel.find({ eventId, showtimeId, status: 'booked' }, { seats: 1 }).lean(),
+          SeatBookingModel.find({ eventId, showtimeId, status: 'reserved' }, { seats: 1 }).lean(),
+        ]);
+        booked = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+        reserved = reservedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+        // Cập nhật cache luôn
+        await redisClient.set(cacheKey, JSON.stringify({ booked, reserved }), 'EX', 60);
       }
       // Duyệt từng zone để cập nhật trạng thái ghế
       const zonesWithStatus = zones.map(zone => {
