@@ -579,6 +579,7 @@ router.put("/edit", async function (req, res, next) {
     // Xóa cache getEvents của user
     if (itemUpdate.userId) {
       await redis.del(`getEvents:${itemUpdate.userId}`);
+      await redis.del(`events_detail_${id}`)
     }
     res.status(200).json({ status: true, message: "Successfully updated" });
 
