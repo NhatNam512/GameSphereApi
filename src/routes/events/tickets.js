@@ -10,6 +10,8 @@ const ZoneModel = require('../../models/events/zoneModel');
 const Showtime = require('../../models/events/showtimeModel');
 const mongoose = require('mongoose');
 const ticketController = require('../../controllers/events/ticketController');
+const eventModel = require('../../models/events/eventModel');
+const authenticate = require('../../middlewares/auth');
 
 router.get("/all", async function (req, res) {
     try{
@@ -95,21 +97,32 @@ router.get("/getTicket/:userId", async function (req, res) {
 });
 
 // routes/ticket.js
-router.post("/verify-ticket", async (req, res) => {
+router.post("/verify-ticket", authenticate, async (req, res) => {
     try {
-      const { ticketId } = req.body;
-  
+      const { ticketId, showtimeId } = req.body;
+      const userId = req.user.id;
       if (!ticketId) {
         return res.status(400).json({ success: false, message: "Thiếu mã vé." });
       }
   
       const ticket = await Ticket.findOne({ ticketId })
-        .select('_id ticketId userId eventId status usedAt');
-  
+        .select('_id ticketId userId eventId status usedAt showtimeId');
       if (!ticket) {
         return res.status(404).json({ success: false, message: "Không tìm thấy vé." });
       }
-  
+      // Lấy thông tin sự kiện
+      const event = await Event.findById(ticket.eventId).select('_id userId');
+      if (!event) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy sự kiện." });
+      }
+      // Kiểm tra người xác nhận có phải là người tạo sự kiện không
+      if (event.userId.toString() !== userId.toString()) {
+        return res.status(403).json({ success: false, message: "Bạn không có quyền xác nhận vé cho sự kiện này." });
+      }
+      // Kiểm tra showtimeId nếu có truyền vào
+      if (showtimeId && ticket.showtimeId && ticket.showtimeId.toString() !== showtimeId.toString()) {
+        return res.status(400).json({ success: false, message: "ShowtimeId không khớp với vé." });
+      }
       if (ticket.status === "used") {
         return res.status(400).json({ success: false, message: "Vé đã được sử dụng." });
       }
