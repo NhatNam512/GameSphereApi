@@ -135,6 +135,9 @@ router.get("/home", async function (req, res) {
         ev.minTicketPrice = null; 
         ev.maxTicketPrice = null;
       }
+      // Thêm showtimes cho từng event (giống detail)
+      const showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
+      ev.showtimes = showtimes;
       return ev;
     }));
 
