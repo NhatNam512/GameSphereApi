@@ -600,10 +600,10 @@ router.get("/search", async function (req, res) {
     const events = await eventModel.find({
       $or: [
         { name: { $regex: query, $options: "i" } },
-        { description: { $regex: query, $options: "i" } }
       ]
     })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
+      .sort({ timeStart: -1 })
       .lean();
 
     // Map and enrich events as in /home
