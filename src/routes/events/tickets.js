@@ -244,6 +244,27 @@ router.get('/attendees/:eventId', async function (req, res) {
   }
 });
 
+// Endpoint: Lấy số lượng vé theo status used và issued của 1 sự kiện
+router.get('/count/:eventId', async function (req, res) {
+  try {
+    const { eventId } = req.params;
+    // Đếm số lượng vé status = 'used'
+    const usedCount = await Ticket.countDocuments({ eventId, status: 'used' });
+    // Đếm số lượng vé status = 'issued'
+    const issuedCount = await Ticket.countDocuments({ eventId, status: 'issued' });
+    res.status(200).json({
+      status: true,
+      message: 'Lấy số lượng vé theo trạng thái thành công',
+      data: {
+        used: usedCount,
+        issued: issuedCount
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
+  }
+});
+
 router.get('/user/:userId/events', async function (req, res) {
   try {
     const { userId } = req.params;
