@@ -115,14 +115,30 @@ exports.declineInvite = async (req, res) => {
 exports.leaveGroup = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { userId } = req.body;
+    const userId = req.user?.id || req.body.userId; // Ưu tiên dùng req.user nếu có xác thực
+
+    if (!userId) return res.status(400).json({ message: 'Thiếu userId.' });
+
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ message: 'Không tìm thấy group.' });
+
+    // Nếu không phải thành viên
+    if (!group.memberIds.includes(userId)) {
+      return res.status(400).json({ message: 'Bạn không phải thành viên nhóm này.' });
+    }
+
+    // Nếu cần: kiểm tra nếu user là admin và là người duy nhất
+    if (group.ownerId?.toString() === userId) {
+      return res.status(403).json({ message: 'Chủ nhóm không thể rời nhóm. Vui lòng chuyển quyền trước.' });
+    }
+
     group.memberIds = group.memberIds.filter(id => id.toString() !== userId);
     await group.save();
-    res.json({ success: true });
+
+    res.json({ success: true, message: 'Rời nhóm thành công.' });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error(err);
+    res.status(500).json({ message: 'Lỗi máy chủ.' });
   }
 };
 
