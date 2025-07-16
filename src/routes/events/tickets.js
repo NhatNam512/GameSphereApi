@@ -121,7 +121,7 @@ router.post("/verify-ticket", authenticate, async (req, res) => {
       }
       // Kiểm tra showtimeId nếu có truyền vào
       if (showtimeId && ticket.showtimeId && ticket.showtimeId.toString() !== showtimeId.toString()) {
-        return res.status(400).json({ success: false, message: "ShowtimeId không khớp với vé." });
+        return res.status(400).json({ success: false, message: "Không đúng suất diễn." });
       }
       if (ticket.status === "used") {
         return res.status(400).json({ success: false, message: "Vé đã được sử dụng." });
