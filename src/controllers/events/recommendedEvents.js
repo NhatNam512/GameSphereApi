@@ -78,6 +78,14 @@ function collectUserTags(user, topEvents) {
 }
 
 /**
+ * Đếm số lượng tag trùng giữa event và user
+ */
+function countMatchingTags(eventTags, userTags) {
+  if (!eventTags || !userTags) return 0;
+  return eventTags.filter(tag => userTags.includes(tag)).length;
+}
+
+/**
  * Hàm API gợi ý sự kiện cho user
  */
 exports.getRecommendedEvents = async (req, res) => {
@@ -102,6 +110,7 @@ exports.getRecommendedEvents = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const interactions = await Interaction.find({ userId });
+    console.log("Interactions:", interactions);
 
     // 3. Cold start nếu user chưa có lịch sử
     if (interactions.length === 0) {
@@ -126,15 +135,31 @@ exports.getRecommendedEvents = async (req, res) => {
     const seenEventIds = interactions.map(i => i.eventId);
 
     // 5. Query sự kiện gợi ý
-    let query = {
-      tags: { $in: tags },
-      _id: { $nin: seenEventIds },
-      status: 'active',
-      startDate: { $gt: now },
-      ticketsAvailable: { $gt: 0 }
-    };
+    let query = {};
+    if (user.tags?.length) {
+      query.tags = { $in: user.tags };
+    }
+    if (user.location?.coordinates?.length) {
+      query.location = {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: user.location.coordinates
+          },
+          $maxDistance: 20000 // 20km
+        }
+      };
+    }
+    console.log("Event query:", query);
 
     const recommended = await Event.find(query).skip(skip).limit(limit);
+    // Sắp xếp các sự kiện có nhiều tag trùng với user lên đầu
+    const userTags = user.tags || [];
+    recommended.sort((a, b) =>
+      countMatchingTags(b.tags, userTags) - countMatchingTags(a.tags, userTags)
+    );
+    console.log("Events found:", recommended.length, recommended.map(e => e._id));
+    console.log("Recommended events count:", recommended.length);
     const enrichedRecommended = await enrichEventData(recommended);
     const response = { from: 'personalized', events: enrichedRecommended };
     await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);

@@ -55,3 +55,12 @@ exports.createTag = async (req, res) => {
     res.status(500).json({ message: 'Lỗi tạo tag', error: err.message });
   }
 };
+
+exports.getDefaultTags = async (req, res) => {
+  try {
+    const tags = await Tag.find({ isDefault: true }).sort({ name: 1 });
+    res.status(200).json({ status: true, data: tags });
+  } catch (err) {
+    res.status(500).json({ status: false, message: 'Lỗi lấy tag mặc định', error: err.message });
+  }
+};

@@ -331,22 +331,11 @@ router.put('/addTag', async function (req, res) {
 
     const newTagIds = [];
 
-    for (let tagName of tag) {
-      tagName = tagName.trim();
-      if (!tagName) continue;
-
-      const slug = slugify(tagName, { lower: true, strict: true });
-      let tagDoc = await tagModel.findOne({ slug });
-
-      if (!tagDoc) {
-        tagDoc = await tagModel.create({
-          name: tagName,
-          slug,
-          createdBy: userId,
-          isDefault: false
-        });
-      }
-
+    for (let tagId of tag) {
+      if (!tagId) continue;
+      // Kiểm tra tagId hợp lệ và tồn tại
+      const tagDoc = await tagModel.findById(tagId);
+      if (!tagDoc) continue;
       // Chỉ thêm nếu chưa có trong user.tags
       if (!user.tags.includes(tagDoc._id)) {
         newTagIds.push(tagDoc._id);
