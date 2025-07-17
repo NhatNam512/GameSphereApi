@@ -97,7 +97,7 @@ router.get("/home", async function (req, res) {
       let ticketPrices = [];
 
       if (ev.typeBase === 'seat') {
-        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
+        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price layout.seats.seatId');
         console.log(`Event ID: ${ev._id}, Zones found: ${zones.length}`);
         if (zones.length === 0) {
           console.log("No zones found for this event.");
@@ -105,7 +105,10 @@ router.get("/home", async function (req, res) {
         zones.forEach(zone => {
           console.log("Processing zone:", zone._id);
           if (zone && zone.layout && zone.layout.seats) {
-            const currentZonePrices = zone.layout.seats.map(seat => seat.price).filter(price => price !== undefined && price !== null);
+            const currentZonePrices = zone.layout.seats
+              .filter(seat => seat.seatId !== "none")
+              .map(seat => seat.price)
+              .filter(price => price !== undefined && price !== null);
             console.log(`Prices from current zone (${zone._id}):`, currentZonePrices);
             ticketPrices.push(...currentZonePrices);
           } else {
