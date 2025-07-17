@@ -460,7 +460,7 @@ router.put("/edit", async function (req, res, next) {
       id, name, description, timeStart, timeEnd,
       avatar, images, categories, banner,
       location, rating, longitude, latitude, zone,
-      typeBase, showtimes, zones
+      typeBase, showtimes, zones, tags, userId
     } = req.body;
 
     console.log('typeBase:', typeBase, 'zones:', zones, 'isArray:', Array.isArray(zones));
@@ -496,6 +496,30 @@ router.put("/edit", async function (req, res, next) {
         type: "Point",
         coordinates: [longitude, latitude]
       };
+    }
+
+    // ===== ��️ Xử lý TAGS (nếu có) ===== //
+    if (tags && Array.isArray(tags)) {
+      const tagIds = [];
+      for (let tagName of tags) {
+        tagName = tagName.trim();
+        if (!tagName) continue;
+        const slug = slugify(tagName, { lower: true, strict: true });
+        let tag = await tagModel.findOne({ slug }).session(session);
+        if (!tag) {
+          tag = await tagModel.create([
+            {
+              name: tagName,
+              slug,
+              createdBy: userId || itemUpdate.userId,
+              isDefault: false
+            }
+          ], { session });
+          tag = tag[0];
+        }
+        tagIds.push(tag._id);
+      }
+      itemUpdate.tags = tagIds;
     }
 
     await itemUpdate.save({ session });
