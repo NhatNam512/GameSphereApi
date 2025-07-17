@@ -56,7 +56,8 @@ exports.googleLogin = async (req, res) => {
                 token: tokenUser,
                 refreshToken,
                 fcmTokens: user.fcmTokens || [], // Đảm bảo trường fcmTokens tồn tại trong model User
-                role: user.role
+                role: user.role,
+                tags: user.tags
             }
         });
 
