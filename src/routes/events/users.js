@@ -67,7 +67,8 @@ router.post("/login", async function (req, res) {
           token,
           refreshToken,
           fcmTokens: checkUser.fcmTokens || [],
-          role: checkUser.role
+          role: checkUser.role,
+          tags: checkUser.tags
         }
       });
     }
