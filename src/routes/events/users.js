@@ -316,9 +316,10 @@ router.post('/forgotPassword/verify', forgotPasswordController.verifyOtp);
 
 router.post('/forgotPassword/reset', forgotPasswordController.resetPassword);
 
-router.put('/addTag', async function (req, res) {
+router.put('/addTag', authenticate, async function (req, res) {
   try {
-    const { userId, tag = [] } = req.body;
+    const userId = req.user.id;
+    const {tag = [] } = req.body;
 
     if (!userId || !Array.isArray(tag)) {
       return res.status(400).json({ status: false, message: "Thiếu userId hoặc tag không phải là mảng" });
