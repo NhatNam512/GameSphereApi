@@ -180,9 +180,7 @@ exports.getRecommendedEvents = async (req, res) => {
     // 6. Fallback: Recommend các sự kiện phổ biến nếu có lỗi ở trên
     try {
       const fallbackEvents = await Event.find({
-        status: 'active',
         startDate: { $gt: now },
-        ticketsAvailable: { $gt: 0 }
       })
         .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
         .sort({ popularity: -1 }).limit(limit).lean();
