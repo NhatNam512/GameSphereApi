@@ -53,7 +53,7 @@ router.post("/login", async function (req, res) {
         role: checkUser.role,
       };
 
-      const token = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1h" });
+      const token = JWT.sign(tokenPayload, config.SECRETKEY, { expiresIn: "1d" });
       const refreshToken = JWT.sign({ id: checkUser._id }, config.SECRETKEY, { expiresIn: '7d' });
 
       await userModel.findByIdAndUpdate(checkUser._id, { refreshToken });
