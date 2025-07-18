@@ -30,7 +30,6 @@ sub.subscribe("event_updates");
 sub.on("message", (channel, message) => {
   if (channel === "event_updates") {
     const event = JSON.parse(message);
-    console.log("📢 Sự kiện mới được cập nhật:", event);
     // Có thể gửi thông báo đến frontend qua WebSocket
   }
 });
@@ -41,7 +40,6 @@ router.get("/all", async function (req, res) {
     const cachedData = await redis.get(cacheKey);
 
     if (cachedData) {
-      console.log("Lấy dữ liệu từ cache Redis");
       return res.json(JSON.parse(cachedData));
     }
 
@@ -98,24 +96,18 @@ router.get("/home", async function (req, res) {
 
       if (ev.typeBase === 'seat') {
         const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price layout.seats.seatId');
-        console.log(`Event ID: ${ev._id}, Zones found: ${zones.length}`);
         if (zones.length === 0) {
-          console.log("No zones found for this event.");
         }
         zones.forEach(zone => {
-          console.log("Processing zone:", zone._id);
           if (zone && zone.layout && zone.layout.seats) {
             const currentZonePrices = zone.layout.seats
               .filter(seat => seat.seatId !== "none")
               .map(seat => seat.price)
               .filter(price => price !== undefined && price !== null);
-            console.log(`Prices from current zone (${zone._id}):`, currentZonePrices);
             ticketPrices.push(...currentZonePrices);
           } else {
-            console.log(`Zone ${zone._id} does not have valid layout.seats or seats are empty.`);
           }
         });
-        console.log("All collected ticket prices for seat-based event:", ticketPrices);
       } 
       else if (ev.typeBase === 'zone') {
         const zoneTickets = await zoneTicketModel
@@ -463,8 +455,6 @@ router.put("/edit", async function (req, res, next) {
       typeBase, showtimes, zones, tags, userId
     } = req.body;
 
-    console.log('typeBase:', typeBase, 'zones:', zones, 'isArray:', Array.isArray(zones));
-
     const itemUpdate = await eventModel.findById(id).session(session);
 
     if (!itemUpdate) {
@@ -542,8 +532,6 @@ router.put("/edit", async function (req, res, next) {
       }
     }
 
-    console.log('createdShowtimes:', createdShowtimes.length);
-
     // Handle typeBase change cleanup
     if (oldTypeBase && typeBase && oldTypeBase !== typeBase) {
       if (oldTypeBase === 'seat') {
@@ -575,11 +563,9 @@ router.put("/edit", async function (req, res, next) {
     }
 
     if (typeBase === 'seat' && Array.isArray(zones)) {
-      console.log(`[ZONE-EDIT] Xóa tất cả zoneModel của eventId: ${id}`);
       await zoneModel.deleteMany({ eventId: id }).session(session); // Clear old zones for seat type
       await zoneTicketModel.deleteMany({ eventId: id }).session(session); // Clear old seat tickets for seat type
       for (const zone of zones) {
-        console.log(`[ZONE-EDIT] Tạo mới zoneModel cho eventId: ${id}, zone: ${zone.name}, layout:`, JSON.stringify(zone.layout));
         const [newZone] = await zoneModel.create([
           {
             name: zone.name,
@@ -596,7 +582,6 @@ router.put("/edit", async function (req, res, next) {
               price: seat.price
             }));
             if (seatTickets.length > 0) {
-              console.log(`[ZONETICKET-EDIT] Tạo mới ${seatTickets.length} zoneTicket cho eventId: ${id}, showtimeId: ${newShowtime._id}, zone: ${zone.name}`);
               await zoneTicketModel.insertMany(seatTickets, { session });
             }
           }

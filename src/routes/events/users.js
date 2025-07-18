@@ -269,7 +269,6 @@ router.post('/send-notification', sendNotification);
 
 router.post('/refresh-token', async function (req, res) {
   const { refreshToken } = req.body;
-
   if (!refreshToken) {
     return res.status(400).json({ message: 'No refresh token provided' });
   }
