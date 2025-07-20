@@ -210,26 +210,49 @@ exports.getMembers = async (req, res) => {
 exports.updateLocation = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { userId, latitude, longitude } = req.body;
-    if (!userId || latitude == null || longitude == null) {
-      return res.status(400).json({ message: 'Thiếu thông tin vị trí.' });
+    const { userId, latitude, longitude, isSharing } = req.body;
+    if (!userId || typeof isSharing !== 'boolean') {
+      return res.status(400).json({ message: 'Thiếu thông tin.' });
     }
+
+    let update = {
+      isSharing: isSharing === true,
+      updatedAt: new Date()
+    };
+
+    if (isSharing) {
+      if (latitude == null || longitude == null) {
+        return res.status(400).json({ message: 'Thiếu thông tin vị trí.' });
+      }
+      update.latitude = latitude;
+      update.longitude = longitude;
+      update.location = {
+        type: 'Point',
+        coordinates: [longitude, latitude]
+      };
+    } else {
+      // Nếu muốn xóa vị trí khi tắt chia sẻ:
+      update.latitude = null;
+      update.longitude = null;
+      update.location = null;
+    }
+
     const location = await GroupLocation.findOneAndUpdate(
       { groupId, userId },
-      {
-        latitude,
-        longitude,
-        location: {
-          type: 'Point',
-          coordinates: [longitude, latitude]
-        },
-        updatedAt: new Date()
-      },
+      update,
       { upsert: true, new: true }
     );
+
     const io = getSocketIO && getSocketIO();
     if (io) {
-      io.to(`group_${groupId}`).emit('location:update', { groupId, userId, latitude, longitude, updatedAt: location.updatedAt });
+      io.to(`group_${groupId}`).emit('location:update', {
+        groupId,
+        userId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        isSharing: location.isSharing,
+        updatedAt: location.updatedAt
+      });
     }
     res.json({ success: true });
   } catch (err) {
@@ -238,9 +261,9 @@ exports.updateLocation = async (req, res) => {
 };
 
 exports.getLocations = async (req, res) => {
+  const { groupId } = req.params;
   try {
-    const { groupId } = req.params;
-    const locations = await GroupLocation.find({ groupId });
+    const locations = await GroupLocation.find({ groupId, isSharing: true });
     res.json(locations);
   } catch (err) {
     res.status(500).json({ message: err.message });

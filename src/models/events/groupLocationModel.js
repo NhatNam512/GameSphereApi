@@ -18,6 +18,7 @@ const groupLocationSchema = new Schema({
     },
   },
   updatedAt: { type: Date, default: Date.now },
+  isSharing: { type: Boolean, default: false },
 });
 
 // Index để hỗ trợ truy vấn geospatial
