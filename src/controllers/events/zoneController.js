@@ -311,19 +311,24 @@ exports.cancelAllReservedSeats = async (req, res) => {
     const bookings = await SeatBookingModel.find({
       userId, status: 'reserved',
     });
-    if (!bookings.length) {
-      return res.status(200).json({ message: "Không có ghế nào đang giữ." });
-    }
     const io = getSocketIO();
-    for (const booking of bookings) {
-      const { eventId, showtimeId } = booking;
-      for (const seat of booking.seats) {
-        const seatKey = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
-        const currentLocker = await redisClient.get(seatKey);
-        if (currentLocker === userId) {
-          await redisClient.del(seatKey);
+    // Xóa tất cả seatLock của user này trong Redis (kể cả khi không còn booking)
+    // Lấy tất cả key seatLock của user này
+    const pattern = `seatLock:*`;
+    const allKeys = await redisClient.keys(pattern);
+    if (allKeys && allKeys.length > 0) {
+      for (const key of allKeys) {
+        const locker = await redisClient.get(key);
+        if (locker === userId) {
+          await redisClient.del(key);
         }
       }
+    }
+    if (!bookings.length) {
+      return res.status(200).json({ message: "Đã hủy tất cả ghế đang giữ cho user." });
+    }
+    for (const booking of bookings) {
+      const { eventId, showtimeId } = booking;
       await SeatBookingModel.deleteOne({ _id: booking._id });
       if (io) {
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
