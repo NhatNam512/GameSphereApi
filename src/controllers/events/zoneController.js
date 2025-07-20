@@ -314,13 +314,13 @@ exports.cancelAllReservedSeats = async (req, res) => {
     const io = getSocketIO();
     // Xóa tất cả seatLock của user này trong Redis (kể cả khi không còn booking)
     // Lấy tất cả key seatLock của user này
-    const pattern = `seatLock:*`;
-    const allKeys = await redisClient.keys(pattern);
-    if (allKeys && allKeys.length > 0) {
-      for (const key of allKeys) {
-        const locker = await redisClient.get(key);
-        if (locker === userId) {
-          await redisClient.del(key);
+    for (const booking of bookings) {
+      const { eventId, showtimeId, seats } = booking;
+      for (const seat of seats) {
+        const seatKey = `seatLock:${eventId}:${showtimeId}:${seat.seatId}`;
+        const locker = await redisClient.get(seatKey);
+        if (locker && locker.toString() === userId.toString()) {
+          await redisClient.del(seatKey);
         }
       }
     }
