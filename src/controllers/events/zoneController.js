@@ -254,24 +254,9 @@ exports.reserveSeats = async (req, res) => {
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
       }
 
-      // Sau khi xử lý bỏ chọn ghế, cập nhật lại cache trạng thái ghế cho showtime (tối ưu: chỉ cập nhật seatId vừa bỏ)
+      // Xóa cache trạng thái ghế cho showtime này sau khi bỏ chọn ghế
       const cacheKey = `seatStatus:${eventId}:${showtimeId}`;
-      let cacheData = await redisClient.get(cacheKey);
-      let booked = [], reserved = [];
-      if (cacheData) {
-        ({ booked = [], reserved = [] } = JSON.parse(cacheData));
-      } else {
-        // Nếu cache miss, fallback truy vấn lại toàn bộ
-        const [bookedBookingsCache, reservedBookingsCache] = await Promise.all([
-          SeatBookingModel.find({ eventId, showtimeId, status: 'booked' }, { seats: 1 }).lean(),
-          SeatBookingModel.find({ eventId, showtimeId, status: 'reserved' }, { seats: 1 }).lean(),
-        ]);
-        booked = bookedBookingsCache.flatMap(booking => booking.seats.map(seat => seat.seatId));
-        reserved = reservedBookingsCache.flatMap(booking => booking.seats.map(seat => seat.seatId));
-      }
-      // Loại bỏ seatId vừa bỏ khỏi mảng reserved
-      reserved = reserved.filter(id => id !== seat.seatId);
-      await redisClient.set(cacheKey, JSON.stringify({ booked, reserved }), 'EX', 60);
+      await redisClient.del(cacheKey);
 
       return res.status(200).json({
         message: "Bỏ chọn ghế thành công.",
@@ -343,6 +328,9 @@ exports.cancelAllReservedSeats = async (req, res) => {
       if (io) {
         io.to(`event_${eventId}_showtime_${showtimeId}`).emit('zone_data_changed', { eventId, showtimeId });
       }
+      // Xóa cache trạng thái ghế cho showtime này
+      const cacheKey = `seatStatus:${eventId}:${showtimeId}`;
+      await redisClient.del(cacheKey);
     }
     return res.status(200).json({ message: "Đã hủy tất cả ghế đang giữ cho user." });
   } catch (error) {
