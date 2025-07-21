@@ -721,6 +721,8 @@ router.put('/add-zone', async function (req, res) {
   } catch (error) {
     res.status(400).json({ status: true, message: "Failure" });
   }
-})
+});
+
+router.get('/getEstimatedRevenue/:eventId', revenueController.getEstimatedRevenue);
 
 module.exports = router;

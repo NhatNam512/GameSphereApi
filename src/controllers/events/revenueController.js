@@ -98,4 +98,67 @@ exports.getRevenue = async (req, res) => {
     console.error("❌ getRevenue error:", e);
     res.status(400).json({ status: false, message: "Error: " + e.message });
   }
+};
+
+// GET /api/events/estimated-revenue/:eventId
+exports.getEstimatedRevenue = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    if (!eventId) return res.status(400).json({ status: false, message: 'Missing eventId' });
+
+    // 1. Lấy event
+    const event = await eventModel.findById(eventId).lean();
+    if (!event) return res.status(404).json({ status: false, message: 'Event not found' });
+
+    // 2. Lấy showtime
+    const showtimes = await require('../../models/events/showtimeModel').find({ eventId }).lean();
+    const showtimeCount = showtimes.length || 1;
+
+    let estimatedRevenue = 0;
+    let detail = [];
+
+    if (event.typeBase === 'zone' || event.typeBase === 'none') {
+      // 3. Lấy tất cả zoneTicket của event
+      const zoneTickets = await require('../../models/events/zoneTicketModel').find({ eventId }).lean();
+      estimatedRevenue = zoneTickets.reduce((sum, zt) => sum + (zt.price || 0) * (zt.totalTicketCount || 0), 0);
+      detail = zoneTickets.map(zt => ({
+        name: zt.name,
+        price: zt.price,
+        totalTicketCount: zt.totalTicketCount,
+        revenue: (zt.price || 0) * (zt.totalTicketCount || 0)
+      }));
+      estimatedRevenue *= showtimeCount;
+    } else if (event.typeBase === 'seat') {
+      // 4. Lấy tất cả zone của event
+      const zones = await require('../../models/events/zoneModel').find({ eventId }).lean();
+      let seatPriceMap = {};
+      zones.forEach(zone => {
+        if (zone.layout && Array.isArray(zone.layout.seats)) {
+          zone.layout.seats.forEach(seat => {
+            if (seat.price) {
+              seatPriceMap[seat.price] = (seatPriceMap[seat.price] || 0) + 1;
+            }
+          });
+        }
+      });
+      estimatedRevenue = Object.entries(seatPriceMap).reduce((sum, [price, count]) => sum + Number(price) * count, 0);
+      detail = Object.entries(seatPriceMap).map(([price, count]) => ({ price: Number(price), seatCount: count, revenue: Number(price) * count }));
+      estimatedRevenue *= showtimeCount;
+    } else {
+      return res.status(400).json({ status: false, message: 'Unknown typeBase' });
+    }
+
+    res.status(200).json({
+      status: true,
+      eventId,
+      eventName: event.name,
+      typeBase: event.typeBase,
+      showtimeCount,
+      estimatedRevenue,
+      detail
+    });
+  } catch (e) {
+    console.error('❌ getEstimatedRevenue error:', e);
+    res.status(400).json({ status: false, message: 'Error: ' + e.message });
+  }
 }; 
