@@ -604,66 +604,70 @@ router.put("/edit", async function (req, res, next) {
     next(e); // Pass error to next middleware for centralized error handling
   }
 });
-
 router.get("/search", async function (req, res) {
   try {
-    const { query } = req.query;
-    // Use the same fields as /home
-    const events = await eventModel.find({
+    const { query = "", page = 1, limit = 10 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const matchCondition = {
       $or: [
         { name: { $regex: query, $options: "i" } },
-      ]
-    })
+      ],
+    };
+
+    // Đếm tổng số sự kiện phù hợp (nếu cần)
+    const totalEvents = await eventModel.countDocuments(matchCondition);
+
+    const events = await eventModel.find(matchCondition)
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
       .sort({ timeStart: -1 })
+      .skip(skip)
+      .limit(Number(limit))
       .lean();
 
-    // Map and enrich events as in /home
     const mappedEvents = await Promise.all(events.map(async (ev) => {
-      if (ev.location_map && ev.location_map.coordinates) {
+      if (ev.location_map?.coordinates) {
         ev.longitude = ev.location_map.coordinates[0];
         ev.latitude = ev.location_map.coordinates[1];
       }
+
       let ticketPrices = [];
+
       if (ev.typeBase === 'seat') {
         const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
         zones.forEach(zone => {
-          if (zone && zone.layout && zone.layout.seats) {
-            const currentZonePrices = zone.layout.seats.map(seat => seat.price).filter(price => price !== undefined && price !== null);
-            ticketPrices.push(...currentZonePrices);
-          }
+          const prices = zone.layout?.seats?.map(seat => seat.price).filter(p => p != null);
+          ticketPrices.push(...(prices || []));
         });
       } else if (ev.typeBase === 'zone') {
         const zoneTickets = await zoneTicketModel.find({ eventId: ev._id }).select('price');
-        ticketPrices = zoneTickets.map(t => t.price).filter(price => price !== undefined && price !== null);
+        ticketPrices = zoneTickets.map(t => t.price).filter(p => p != null);
       } else if (ev.typeBase === 'none') {
         const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
-        ticketPrices = showtimes.map(st => st.ticketPrice).filter(price => price !== undefined && price !== null);
+        ticketPrices = showtimes.map(st => st.ticketPrice).filter(p => p != null);
       }
-      if (ticketPrices.length > 0) {
-        ev.minTicketPrice = Math.min(...ticketPrices);
-        ev.maxTicketPrice = Math.max(...ticketPrices);
-      } else {
-        ev.minTicketPrice = null;
-        ev.maxTicketPrice = null;
-      }
-      // Lấy showtimes cho từng event
+
+      ev.minTicketPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : null;
+      ev.maxTicketPrice = ticketPrices.length > 0 ? Math.max(...ticketPrices) : null;
+
       const showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
       ev.showtimes = showtimes;
+
       return ev;
     }));
 
-    if (mappedEvents.length > 0) {
-      res.status(200).json({
-        status: true,
-        message: "Tìm kiếm sự kiện thành công",
-        data: mappedEvents
-      });
-    } else {
-      res.status(404).json({ status: false, message: "Không tìm thấy sự kiện" });
-    }
+    return res.status(200).json({
+      status: true,
+      message: "Tìm kiếm sự kiện thành công",
+      data: mappedEvents,
+      total: totalEvents,
+      page: Number(page),
+      hasMore: skip + mappedEvents.length < totalEvents
+    });
+
   } catch (e) {
-    res.status(400).json({ status: false, message: "Error: " + e });
+    console.error("🔴 Search error:", e);
+    return res.status(500).json({ status: false, message: "Lỗi server: " + e });
   }
 });
 
