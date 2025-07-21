@@ -127,7 +127,7 @@ exports.getEstimatedRevenue = async (req, res) => {
         totalTicketCount: zt.totalTicketCount,
         revenue: (zt.price || 0) * (zt.totalTicketCount || 0)
       }));
-      estimatedRevenue *= showtimeCount;
+      estimatedRevenue;
     } else if (event.typeBase === 'seat') {
       // 4. Lấy tất cả zone của event
       const zones = await require('../../models/events/zoneModel').find({ eventId }).lean();
@@ -143,7 +143,7 @@ exports.getEstimatedRevenue = async (req, res) => {
       });
       estimatedRevenue = Object.entries(seatPriceMap).reduce((sum, [price, count]) => sum + Number(price) * count, 0);
       detail = Object.entries(seatPriceMap).map(([price, count]) => ({ price: Number(price), seatCount: count, revenue: Number(price) * count }));
-      estimatedRevenue *= showtimeCount;
+      estimatedRevenue;
     } else {
       return res.status(400).json({ status: false, message: 'Unknown typeBase' });
     }
