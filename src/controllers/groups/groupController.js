@@ -4,6 +4,45 @@ const userModel = require('../../models/userModel');
 const notificationService = require('../../services/notificationService');
 const { getSocketIO } = require('../../../socket/socket');
 
+// Map để lưu các timeout cho mỗi user trong mỗi group
+const sharingTimeouts = new Map();
+
+// Hàm tạo key cho timeout map
+const getTimeoutKey = (groupId, userId) => `${groupId}_${userId}`;
+
+// Hàm để tự động tắt sharing sau timeout
+const autoDisableSharing = async (groupId, userId) => {
+  try {
+    const update = {
+      isSharing: false,
+      updatedAt: new Date(),
+      latitude: null,
+      longitude: null,
+      location: null
+    };
+
+    const location = await GroupLocation.findOneAndUpdate(
+      { groupId, userId },
+      update,
+      { new: true }
+    );
+
+    const io = getSocketIO && getSocketIO();
+    if (io) {
+      io.to(`group_${groupId}`).emit('location:update', {
+        groupId,
+        userId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        isSharing: location.isSharing,
+        updatedAt: location.updatedAt
+      });
+    }
+  } catch (error) {
+    console.error('Error in autoDisableSharing:', error);
+  }
+};
+
 exports.createGroup = async (req, res) => {
   try {
     const { eventId, groupName, ownerId, memberIds = [] } = req.body;
@@ -215,6 +254,13 @@ exports.updateLocation = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu thông tin.' });
     }
 
+    // Clear existing timeout if any
+    const timeoutKey = getTimeoutKey(groupId, userId);
+    if (sharingTimeouts.has(timeoutKey)) {
+      clearTimeout(sharingTimeouts.get(timeoutKey));
+      sharingTimeouts.delete(timeoutKey);
+    }
+
     let update = {
       isSharing: isSharing === true,
       updatedAt: new Date()
@@ -230,6 +276,14 @@ exports.updateLocation = async (req, res) => {
         type: 'Point',
         coordinates: [longitude, latitude]
       };
+
+      // Set new timeout for 60 minutes
+      const timeout = setTimeout(() => {
+        autoDisableSharing(groupId, userId);
+        sharingTimeouts.delete(timeoutKey);
+      }, 60 * 60 * 1000); // 60 minutes in milliseconds
+
+      sharingTimeouts.set(timeoutKey, timeout);
     } else {
       // Nếu muốn xóa vị trí khi tắt chia sẻ:
       update.latitude = null;
