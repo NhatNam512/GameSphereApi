@@ -7,7 +7,7 @@ const reviewEventSchema = new schema({
     userId: {type: oid, ref: "users"},
     comment: { type: String, default: "" }, // Nội dung bình luận
     rating: { type: Number, min: 1, max: 5, required: true },
-    image: {type: String},
+    image: {type: [String]},
     status: {type: Number}
 }, { timestamps: true });
 
