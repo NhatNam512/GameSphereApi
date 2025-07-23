@@ -298,6 +298,7 @@ exports.updateLocation = async (req, res) => {
     );
 
     const io = getSocketIO && getSocketIO();
+    console.log(io);
     if (io) {
       io.to(`group_${groupId}`).emit('location:update', {
         groupId,
