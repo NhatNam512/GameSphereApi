@@ -307,6 +307,9 @@ exports.updateLocation = async (req, res) => {
         isSharing: location.isSharing,
         updatedAt: location.updatedAt
       });
+      io.to(`group_${groupId}`).emit('location:update', payload);
+
+      console.log(`[Socket] 🔄 Emitted 'location:update' to group_${groupId}:`, payload);
     }
     res.json({ success: true });
   } catch (err) {
