@@ -117,7 +117,11 @@ exports.getEstimatedRevenue = async (req, res) => {
     let estimatedRevenue = 0;
     let detail = [];
 
-    if (event.typeBase === 'zone' || event.typeBase === 'none') {
+    if (event.typeBase === 'none') {
+      console.log(showtimes);
+      estimatedRevenue = showtimes[0].price*showtimeCount
+    }
+    else if (event.typeBase === 'zone') {
       // 3. Lấy tất cả zoneTicket của event
       const zoneTickets = await require('../../models/events/zoneTicketModel').find({ eventId }).lean();
       estimatedRevenue = zoneTickets.reduce((sum, zt) => sum + (zt.price || 0) * (zt.totalTicketCount || 0), 0);
