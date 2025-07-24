@@ -121,7 +121,7 @@ exports.createOrder = async (req, res) => {
     } catch (e) {
         await session.abortTransaction();
         session.endSession();
-        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo đơn hàng." });
+        return res.status(500).json({ success: false, message: "Đã xảy ra lỗi trong quá trình tạo đơn hàng."+e });
     }
 }
 

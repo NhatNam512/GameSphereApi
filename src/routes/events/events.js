@@ -34,6 +34,63 @@ sub.on("message", (channel, message) => {
   }
 });
 
+// routes/events.js
+router.delete("/:eventId",  async (req, res) => {
+  const { eventId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(eventId)) {
+    return res.status(400).json({ status: false, message: "eventId không hợp lệ" });
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const event = await eventModel.findById(eventId).session(session);
+    if (!event) {
+      await session.abortTransaction();
+      return res.status(404).json({ status: false, message: "Event không tồn tại" });
+    }
+    // Xoá các dữ liệu liên quan
+    await Promise.all([
+      showtimeModel.deleteMany({ event: eventId }).session(session),
+      zoneModel.deleteMany({ event: eventId }).session(session),
+      zoneTicketModel.deleteMany({ event: eventId }).session(session),
+      seatBookingModel.deleteMany({ event: eventId }).session(session),
+      zoneBookingModel.deleteMany({ event: eventId }).session(session),
+      // Nếu bạn có các bảng interactions, tags gán theo event thì thêm vào đây
+      // tagModel.updateMany({ events: eventId }, { $pull: { events: eventId } }).session(session),
+    ]);
+
+    await eventModel.deleteOne({ _id: eventId }).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Invalidate cache
+    await redis.del("events");
+    await redis.del(`event:${eventId}`);
+
+    // Publish để frontend / worker khác biết
+    await pub.publish(
+      "event_updates",
+      JSON.stringify({ type: "DELETE", eventId, by: req.user?._id })
+    );
+
+    return res.status(200).json({
+      status: true,
+      message: "Xoá sự kiện thành công",
+      data: { eventId }
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error(err);
+    return res.status(500).json({ status: false, message: "Lỗi hệ thống", error: err.message });
+  }
+});
+
+
 router.get("/all", async function (req, res) {
   try {
     const cacheKey = "events";
@@ -66,7 +123,7 @@ router.get("/home", async function (req, res) {
     if (cachedData) {
       console.time("📦 JSON.parse");
       const parsedData = JSON.parse(cachedData);
-      console.timeEnd("📦 JSON.parse");
+      console.timeEnd("📦 JSON.parse "+parsedData);
 
       console.time("🚀 res.json");
       res.status(200).json({
