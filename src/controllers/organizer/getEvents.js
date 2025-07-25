@@ -27,8 +27,10 @@ async function getShowtimesWithTickets(event, showtimes, zones, zoneTicketsMap) 
     zoneMap.set(zoneId, zone);
     if (event.typeBase === 'seat') {
       const seats = zone.layout?.seats || [];
-      seatTotal += seats.length;
-      seatPriceMap.set(zoneId, Object.fromEntries(seats.map(s => [s.seatId, s.price || event.ticketPrice || 0])));
+      // Không tính ghế có seatId là "none"
+      const validSeats = seats.filter(seat => seat.seatId && seat.seatId !== 'none');
+      seatTotal += validSeats.length;
+      seatPriceMap.set(zoneId, Object.fromEntries(validSeats.map(s => [s.seatId, s.price || event.ticketPrice || 0])));
     }
   });
 

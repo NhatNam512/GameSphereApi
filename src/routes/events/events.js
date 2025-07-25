@@ -786,12 +786,4 @@ router.put('/add-zone', async function (req, res) {
 
 router.get('/getEstimatedRevenue/:eventId', revenueController.getEstimatedRevenue);
 
-router.get('/test', async function (req, res) {
-  try {
-    res.status(200).json({ status: true, message: "Successfully updated" });
-  } catch (error) {
-    res.status(400).json({ status: true, message: "Failure" });
-  }
-});
-
 module.exports = router;
