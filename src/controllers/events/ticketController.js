@@ -77,20 +77,11 @@ exports.getAllTicketsByEvent = async (req, res) => {
           }
         }
         const tickets = Object.values(areaMap);
-        result = { ...result, tickets };
-        // Gộp soldTickets theo zoneName (mapping từ seatId sang zoneName)
+        result = { ...result, tickets, soldTickets };
+        // Gộp soldTickets theo zoneName (sử dụng zoneName có sẵn trong soldTickets)
         const zoneCountMap = {};
         for (const sold of soldTickets) {
-          let zoneName = 'Unknown';
-          let seatId = sold.seatId || sold.seat?.seatId;
-          if (seatId) {
-            for (const zone of zones) {
-              if (zone.layout?.seats?.some(s => s.seatId === seatId)) {
-                zoneName = zone.name;
-                break;
-              }
-            }
-          }
+          const zoneName = sold.zoneName || 'Unknown';
           zoneCountMap[zoneName] = (zoneCountMap[zoneName] || 0) + 1;
         }
         soldTicketsByZone = Object.entries(zoneCountMap).map(([zoneName, soldCount]) => ({ zoneName, soldCount }));
@@ -183,6 +174,7 @@ const handleZoneTickets = async (eventId) => {
 
 const handleSeatTickets = async (eventId) => {
   const zones = await zoneModel.find({ eventId });
+  
   const showtimes = await showtimeModel.find({ eventId });
   const showtimeIds = showtimes.map(s => s._id);
   const zoneTickets = await ZoneTicket.find({ showtimeId: { $in: showtimeIds } }).populate('showtimeId');
@@ -262,57 +254,68 @@ const handleSeatTickets = async (eventId) => {
 
   const tickets = Array.from(ticketGroups.values());
 
-  // Lấy soldTickets từ issued tickets, fallback sang booking nếu không có
-  let soldGroups = new Map();
-  for (const ticket of issuedTickets) {
-    if (ticket.seat && ticket.seat.seatId) {
-      const zone = zones.find(z => z._id.toString() === (ticket.zone?.zoneId?.toString() || ''));
-      const seatInfo = zone?.layout?.seats?.find(s => s.seatId === ticket.seat.seatId);
-      if (seatInfo) {
-        const area = seatInfo.area || 'Unknown';
-        const key = `${area}_${ticket.showtimeId}`;
-        if (!soldGroups.has(key)) {
-          soldGroups.set(key, {
-            area,
-            showtimeId: ticket.showtimeId,
-            totalSold: 0,
-            soldSeats: [],
-            users: new Set()
-          });
+  // Lấy soldTickets từ issued tickets với cấu trúc individual ticket records
+  let soldTickets = issuedTickets.map(ticket => {
+    // Tìm zone name từ seatId (vì tickets không có zone info nhưng có seat info)
+    let zoneName = 'Unknown';
+    let zoneId = ticket.zone?.zoneId;
+    const seatId = ticket.seat?.seatId;
+    
+    // Nếu không có zoneId nhưng có seatId, tìm zone từ seat layout
+    if (!zoneId && seatId) {
+      for (const zone of zones) {
+        if (zone.layout && zone.layout.seats) {
+          const seat = zone.layout.seats.find(s => s.seatId === seatId);
+          if (seat) {
+            zoneName = zone.name;
+            zoneId = zone._id;
+            break;
+          }
         }
-        const group = soldGroups.get(key);
-        group.totalSold += 1;
-        group.soldSeats.push({
-          ticketId: ticket._id,
-          seatId: ticket.seat.seatId,
-          zoneId: ticket.zone?.zoneId,
-          zoneName: ticket.zone?.zoneName,
-          userId: ticket.userId._id,
-          userName: ticket.userId.name || ticket.userId.email,
-          status: ticket.status,
-          issuedAt: ticket.issuedAt
-        });
-        group.users.add(ticket.userId._id.toString());
+      }
+    } else if (zoneId) {
+      // Nếu có zoneId, tìm zone name
+      const zone = zones.find(z => z._id.toString() === zoneId.toString());
+      if (zone) {
+        zoneName = zone.name;
       }
     }
-  }
-  let soldTickets = Array.from(soldGroups.values()).map(g => ({
-    area: g.area,
-    showtimeId: g.showtimeId,
-    totalSold: g.totalSold,
-    uniqueUsers: g.users.size,
-    soldSeats: g.soldSeats
-  }));
+    
+    return {
+      ticketId: ticket._id,
+      zoneTicketId: zoneId,
+      zoneName: zoneName,
+      userId: ticket.userId._id,
+      userName: ticket.userId.name || ticket.userId.email,
+      status: ticket.status,
+      issuedAt: ticket.issuedAt
+    };
+  });
+
+  // Fallback sang booking nếu không có issued tickets
   if (soldTickets.length === 0) {
     const soldSeatBookings = await SeatBooking.find({ eventId: eventId, status: 'booked' }).populate('userId');
     soldTickets = soldSeatBookings.flatMap(booking =>
-      booking.seats.map(seat => ({
-        bookingId: booking._id,
-        seatId: seat.seatId,
-        zoneId: seat.zoneId,
-        userId: booking.userId._id,
-        userName: booking.userId.name || booking.userId.email
-      }))
+      booking.seats.map(seat => {
+        // Tìm zone name từ zones collection
+        let zoneName = 'Unknown';
+        if (seat.zoneId) {
+          const zone = zones.find(z => z._id.toString() === seat.zoneId.toString());
+          if (zone) {
+            zoneName = zone.name;
+          }
+        }
+        
+        return {
+          ticketId: booking._id, // Using bookingId as ticketId for consistency
+          zoneTicketId: seat.zoneId,
+          zoneName: zoneName,
+          userId: booking.userId._id,
+          userName: booking.userId.name || booking.userId.email,
+          status: 'booked',
+          issuedAt: booking.createdAt
+        };
+      })
     );
   }
 
@@ -353,9 +356,11 @@ const handleNoneTickets = async (eventId) => {
     };
   });
 
-  // Lấy soldTickets từ issued tickets, fallback sang booking nếu không có
+  // Lấy soldTickets từ issued tickets với cấu trúc consistent
   let soldTickets = issuedTickets.map(ticket => ({
     ticketId: ticket._id,
+    zoneTicketId: null, // Not applicable for 'none' type
+    zoneName: null, // Not applicable for 'none' type
     showtimeId: ticket.showtimeId,
     userId: ticket.userId._id,
     userName: ticket.userId.name || ticket.userId.email,
