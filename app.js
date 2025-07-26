@@ -8,6 +8,7 @@ const compression = require('compression');
 const connectDB = require('./src/config/database');
 const errorHandler = require('./src/middlewares/errorHandler');
 require('./src/controllers/events/bookingCleanupJob')
+require('./src/controllers/events/orderCleanupJob')
 
 var router = require('./src/routes')
 

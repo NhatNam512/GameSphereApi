@@ -11,11 +11,17 @@ cron.schedule('*/2 * * * *', async () => {
   console.log('🧹 Running order cleanup job...');
 
   try {
-    // Tìm các đơn hàng pending quá 10 phút
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    // Tìm các đơn hàng pending đã hết hạn
+    const now = new Date();
     const expiredOrders = await Order.find({
       status: 'pending',
-      createdAt: { $lt: tenMinutesAgo }
+      $or: [
+        { expiresAt: { $lt: now } }, // Sử dụng expiresAt field mới
+        { 
+          expiresAt: { $exists: false }, // Fallback cho các đơn cũ không có expiresAt
+          createdAt: { $lt: new Date(now.getTime() - 10 * 60 * 1000) }
+        }
+      ]
     }).lean();
 
     if (expiredOrders.length === 0) {
