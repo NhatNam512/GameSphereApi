@@ -300,10 +300,28 @@ router.get('/grouped/:userId', async function (req, res) {
       .populate('orderId', '_id totalPrice status createdAt')
       .lean();
 
-    if (!tickets.length) {
+    // Debug logging
+    console.log('🎫 Tickets found:', tickets.length);
+    if (tickets.length > 0) {
+      console.log('🎫 Sample ticket eventId:', tickets[0].eventId);
+      console.log('🎫 Sample ticket showtimeId:', tickets[0].showtimeId);
+    }
+
+    // Filter ra những vé có eventId hợp lệ
+    const validTickets = tickets.filter(ticket => {
+      if (!ticket.eventId || !ticket.eventId._id) {
+        console.log('⚠️ Skipping ticket with invalid eventId:', ticket.ticketId);
+        return false;
+      }
+      return true;
+    });
+
+    console.log('🎫 Valid tickets after filter:', validTickets.length);
+
+    if (!validTickets.length) {
       return res.status(200).json({
         status: true,
-        message: 'Người dùng chưa có vé nào',
+        message: 'Người dùng chưa có vé hợp lệ nào',
         data: []
       });
     }
@@ -311,7 +329,7 @@ router.get('/grouped/:userId', async function (req, res) {
     // Gộp vé theo eventId và showtimeId
     const groupedTickets = {};
     
-    tickets.forEach(ticket => {
+    validTickets.forEach(ticket => {
       const eventId = ticket.eventId?._id?.toString();
       const showtimeId = ticket.showtimeId?._id?.toString() || 'no-showtime';
       const groupKey = `${eventId}-${showtimeId}`;
@@ -517,6 +535,56 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
     res.status(500).json({ 
       status: false, 
       message: 'Lỗi server: ' + e.message 
+    });
+  }
+});
+
+// DEBUG: Endpoint để kiểm tra dữ liệu ticket và event
+router.get('/debug/:userId', async function (req, res) {
+  try {
+    const { userId } = req.params;
+    
+    // Lấy raw tickets không populate
+    const rawTickets = await Ticket.find({ userId })
+      .select('_id ticketId eventId showtimeId')
+      .limit(3)
+      .lean();
+    
+    // Lấy tickets có populate
+    const populatedTickets = await Ticket.find({ userId })
+      .select('_id ticketId eventId showtimeId')
+      .populate('eventId', '_id name avatar location')
+      .populate('showtimeId', '_id startTime endTime')
+      .limit(3)
+      .lean();
+    
+    // Lấy events trực tiếp
+    const eventIds = rawTickets.map(t => t.eventId);
+    const events = await Event.find({ _id: { $in: eventIds } })
+      .select('_id name avatar location')
+      .lean();
+    
+    res.status(200).json({
+      status: true,
+      message: 'Debug data',
+      data: {
+        rawTickets,
+        populatedTickets,
+        events,
+        analysis: {
+          rawTicketCount: rawTickets.length,
+          populatedTicketCount: populatedTickets.length,
+          eventCount: events.length,
+          populateWorking: populatedTickets.every(t => t.eventId && t.eventId.name)
+        }
+      }
+    });
+    
+  } catch (e) {
+    console.error('Debug error:', e);
+    res.status(500).json({ 
+      status: false, 
+      message: 'Debug error: ' + e.message 
     });
   }
 });
