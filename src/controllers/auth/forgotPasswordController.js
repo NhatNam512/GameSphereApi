@@ -3,6 +3,7 @@ const redis = require('../../redis/redisClient');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const sgMail = require("@sendgrid/mail");
+const { sendOtpEmail } = require('../../services/mailService');
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Gửi OTP qua email
@@ -21,12 +22,9 @@ exports.requestForgotPassword = async (req, res) => {
   await redis.set(`forgot_otp:${email}`, otp, 'EX', 300); // 5 phút
 
   // Gửi email
-  await sgMail.send({
-    from: { email: "namnnps38713@gmail.com", name: "EventSphere" },
-    to: email,
-    subject: "Mã OTP đặt lại mật khẩu",
-    text: `Mã OTP của bạn là: ${otp}. Có hiệu lực trong 5 phút.`,
-  });
+  await sendOtpEmail(email, otp)
+  .then((res) => console.log('✅ Email sent:', res))
+  .catch((err) => console.error('❌ Error sending email:', err));;
 
   return res.json({ message: 'Đã gửi OTP về email' });
 };
