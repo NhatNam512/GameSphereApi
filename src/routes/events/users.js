@@ -19,6 +19,7 @@ const { default: slugify } = require('slugify');
 const tagModel = require('../../models/events/tagModel');
 const { cancelAllReservedSeats } = require('../../controllers/events/zoneController');
 const { authenticate } = require('../../middlewares/auth');
+const { sendOtpEmail } = require('../../services/mailService');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();
@@ -108,12 +109,7 @@ router.post("/register", async function (req, res) {
     await redis.set(`pending-user:${email}`, userData, "EX", 600);
 
     // Gửi email
-    await sgMail.send({
-      from: { email: "namnnps38713@gmail.com", name: "EventSphere" },
-      to: email,
-      subject: "Mã xác nhận đăng ký",
-      text: `Mã OTP của bạn là: ${otp}. Có hiệu lực trong 5 phút.`,
-    });
+    await sendOtpEmail(email, otp);
 
     res.status(200).json({
       status: 200,
