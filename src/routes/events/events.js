@@ -18,6 +18,7 @@ const zoneModel = require('../../models/events/zoneModel');
 const seatBookingModel = require('../../models/events/seatBookingModel');
 const zoneBookingModel = require('../../models/events/zoneBookingModel');
 const tagModel = require('../../models/events/tagModel');
+const previewEventModel = require('../../models/events/previewEventModel');
 const { default: slugify } = require('slugify');
 const revenueController = require('../../controllers/events/revenueController');
 const authMiddleware = require('../../middlewares/auth');
@@ -138,7 +139,8 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find()
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId")
+      .populate("userId", "username picUrl")
       .lean();
     console.timeEnd("🗃️ DB Query");
 
@@ -212,7 +214,21 @@ router.get("/home", async function (req, res) {
 router.get("/detail/:id", async function (req, res, next) {
   try {
     const { id } = req.params;
-    const cacheKey = `events_detail_${id}`;
+    
+    // Lấy thông tin user từ token (optional)
+    let currentUserId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const decoded = JWT.verify(token, config.privateKey);
+        currentUserId = decoded._id;
+      } catch (err) {
+        // Token không hợp lệ, bỏ qua và để currentUserId = null
+      }
+    }
+
+    const cacheKey = `events_detail_${id}_${currentUserId || 'anonymous'}`;
     const cachedData = await redis.get(cacheKey);
     
     if (cachedData) {
@@ -335,7 +351,17 @@ router.get("/detail/:id", async function (req, res, next) {
       tagNames = tags.map(tag => tag.name);
     }
 
-    const result = { ...detail.toObject(), showtimes, ...ticketInfo, tags: tagNames };
+    // Kiểm tra user đã review event này chưa
+    let isPreview = false;
+    if (currentUserId) {
+      const existingReview = await previewEventModel.findOne({
+        eventId: id,
+        userId: currentUserId
+      });
+      isPreview = !!existingReview;
+    }
+
+    const result = { ...detail.toObject(), showtimes, ...ticketInfo, tags: tagNames, isPreview };
     await redis.set(cacheKey, JSON.stringify(result), 'EX', 300);
     return res.status(200).json({
       status: true,

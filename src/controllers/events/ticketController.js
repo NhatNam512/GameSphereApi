@@ -149,7 +149,8 @@ const handleZoneTickets = async (eventId) => {
 
   // Lấy soldTickets từ issued tickets, fallback sang booking nếu không có
   let soldTickets = issuedTickets.map(ticket => ({
-    ticketId: ticket._id,
+    id: ticket._id,
+    ticketId: ticket.ticketId,
     zoneTicketId: ticket.zone?.zoneId,
     zoneName: ticket.zone?.zoneName,
     userId: ticket.userId._id,
@@ -282,7 +283,8 @@ const handleSeatTickets = async (eventId) => {
     }
     
     return {
-      ticketId: ticket._id,
+      id: ticket._id,
+      ticketId: ticket.ticketId,
       zoneTicketId: zoneId,
       zoneName: zoneName,
       userId: ticket.userId._id,

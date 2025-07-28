@@ -38,7 +38,9 @@ const events = new schema({
 
     zone: { type: oid, ref: 'zones' },
     
-    embedding: { type: [Number] }
+    embedding: { type: [Number] },
+    
+    isPreview: { type: Boolean, default: false }
 });
 
 events.index({ timeStart: 1 });
