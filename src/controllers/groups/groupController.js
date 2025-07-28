@@ -298,18 +298,17 @@ exports.updateLocation = async (req, res) => {
     );
 
     const io = getSocketIO && getSocketIO();
-    console.log(io);
     if (io) {
-      io.to(`group_${groupId}`).emit('location:update', {
+      const payload = {
         groupId,
         userId,
         latitude: location.latitude,
         longitude: location.longitude,
         isSharing: location.isSharing,
         updatedAt: location.updatedAt
-      });
+      };
+      
       io.to(`group_${groupId}`).emit('location:update', payload);
-
       console.log(`[Socket] 🔄 Emitted 'location:update' to group_${groupId}:`, payload);
     }
     res.json({ success: true });

@@ -1,40 +1,87 @@
 const { Server } = require("socket.io");
+const socketConfig = require("../src/config/socket");
 
 let io;
 let heartbeatInterval;
 
 function initializeSocket(server) {
-    io = new Server(server, {
-        cors: {
-            origin: "*",
-            methods: ["GET", "POST"],
-            credentials: true
-        },
-        transports: ["websocket", "polling"], // Hỗ trợ cả WebSocket và Polling
-
-    });
+    // ✅ Sử dụng config từ file riêng
+    const config = { ...socketConfig };
+    delete config.heartbeatInterval; // Remove custom properties
+    delete config.enableLogging;
+    delete config.maxRoomsPerSocket;
+    delete config.rateLimit;
+    
+    io = new Server(server, config);
 
     io.on("connection", (socket) => {
-        console.log("Client kết nối:", socket.id);
+        console.log(`🔗 Client kết nối: ${socket.id} | Transport: ${socket.conn.transport.name}`);
+        
+        // ✅ Lưu thông tin client để debug
+        socket.clientInfo = {
+            connectedAt: new Date(),
+            transport: socket.conn.transport.name,
+            userAgent: socket.handshake.headers['user-agent']
+        };
 
-        // Thêm nhiều log để debug
-        socket.on("connect_error", (error) => {
-            console.error("Socket kết nối lỗi:", error);
+        // ✅ Xử lý transport upgrade
+        socket.conn.on('upgrade', () => {
+            console.log(`🔄 ${socket.id} upgraded to ${socket.conn.transport.name}`);
         });
 
         // ✅ Nhận userId từ phía client và join vào room
         socket.on("joinRoom", (userId) => {
-            socket.join(userId); // Mỗi user là một room riêng
-            console.log(`🔗 User ${userId} đã join room riêng.`);
+            socket.userId = userId;
+            socket.join(userId); // User room
+            console.log(`👤 User ${userId} joined personal room | Socket: ${socket.id}`);
+        });
+
+        // ✅ Join group room để nhận location updates
+        socket.on("joinGroup", (groupId) => {
+            if (!groupId) return;
+            socket.join(`group_${groupId}`);
+            console.log(`👥 Socket ${socket.id} joined group_${groupId}`);
+        });
+
+        // ✅ Leave group room
+        socket.on("leaveGroup", (groupId) => {
+            if (!groupId) return;
+            socket.leave(`group_${groupId}`);
+            console.log(`👥 Socket ${socket.id} left group_${groupId}`);
+        });
+
+        // ✅ Heartbeat cho mobile - client gửi ping
+        socket.on("ping", (callback) => {
+            if (typeof callback === 'function') {
+                callback('pong');
+            }
+        });
+
+        // ✅ Enhanced error handling
+        socket.on("connect_error", (error) => {
+            console.error(`❌ Socket connection error [${socket.id}]:`, error.message);
+        });
+
+        socket.on("error", (error) => {
+            console.error(`❌ Socket error [${socket.id}]:`, error.message);
         });
 
         socket.on("disconnect", (reason) => {
-            console.log("Client ngắt kết nối:", socket.id, "Lý do:", reason);
+            const duration = socket.clientInfo ? 
+                Math.round((Date.now() - socket.clientInfo.connectedAt.getTime()) / 1000) : 0;
+            console.log(`🔌 Client disconnected: ${socket.id} | Reason: ${reason} | Duration: ${duration}s`);
         });
 
-        // Ví dụ về việc bắt và log các sự kiện khác
-        socket.on("error", (error) => {
-            console.error("Lỗi socket:", error);
+        // ✅ Test connection - để client kiểm tra kết nối
+        socket.on("testConnection", (data, callback) => {
+            if (typeof callback === 'function') {
+                callback({
+                    status: 'ok',
+                    socketId: socket.id,
+                    timestamp: Date.now(),
+                    received: data
+                });
+            }
         });
     });
 
@@ -58,28 +105,86 @@ function getSocketIO() {
     return io;
 }
 
-// Hàm gửi tin nhắn định kỳ mỗi 5 phút
+// ✅ Heartbeat system tối ưu cho mobile
 function startPeriodicMessage() {
     // Xóa interval cũ nếu có
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
     }
 
-    // Tạo interval mới
+    // Tạo interval mới - giảm xuống 2 phút cho mobile
     heartbeatInterval = setInterval(() => {
-        if (!io) return; // Đảm bảo io đã được khởi tạo
+        if (!io) return;
+
+        const connectedClients = io.engine.clientsCount;
+        if (connectedClients === 0) return; // Không gửi nếu không có client
 
         const currentTime = new Date().toLocaleString();
-        const message = {
-            type: 'periodic',
-            content: `Tin nhắn định kỳ - ${currentTime}`,
-            timestamp: Date.now()
+        const heartbeat = {
+            type: 'heartbeat',
+            serverTime: currentTime,
+            timestamp: Date.now(),
+            connectedClients: connectedClients
         };
 
-        // Gửi tin nhắn đến tất cả client
-        io.emit('periodicMessage', message);
-        console.log(`📨 Đã gửi tin nhắn định kỳ đến tất cả client - ${currentTime}`);
-    }, 5 * 60 * 1000); // 5 phút = 5 * 60 * 1000 milliseconds
+        // Chỉ gửi heartbeat, không gửi message không cần thiết
+        io.emit('serverHeartbeat', heartbeat);
+        if (socketConfig.enableLogging) {
+            console.log(`💓 Server heartbeat sent to ${connectedClients} clients - ${currentTime}`);
+        }
+    }, socketConfig.heartbeatInterval);
 }
 
-module.exports = { initializeSocket, getSocketIO };
+// ✅ Thêm các utility functions
+function getConnectionStats() {
+    if (!io) return null;
+    
+    return {
+        totalConnections: io.engine.clientsCount,
+        connectedSockets: Array.from(io.sockets.sockets.keys()),
+        rooms: Array.from(io.sockets.adapter.rooms.keys()),
+        timestamp: Date.now()
+    };
+}
+
+// ✅ Broadcast to specific room với error handling
+function broadcastToRoom(roomId, event, data) {
+    if (!io) {
+        console.error('❌ Socket.IO not initialized');
+        return false;
+    }
+    
+    try {
+        io.to(roomId).emit(event, data);
+        console.log(`📡 Broadcasted '${event}' to room '${roomId}'`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Error broadcasting to room ${roomId}:`, error.message);
+        return false;
+    }
+}
+
+// ✅ Cleanup function khi server shutdown
+function cleanup() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+    
+    if (io) {
+        io.close();
+        console.log('🔌 Socket.IO server closed');
+    }
+}
+
+// ✅ Graceful shutdown handling
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+
+module.exports = { 
+    initializeSocket, 
+    getSocketIO, 
+    getConnectionStats, 
+    broadcastToRoom, 
+    cleanup 
+};

@@ -19,6 +19,62 @@ var gamesRouter = require('./games/games');
 var categoriesGamesRouter = require('./games/categoriesGames');
 var previewGameRouter = require('./games/previewGame');
 
+// ✅ Debug endpoint cho Socket.IO
+const { getSocketIO, getConnectionStats, broadcastToRoom } = require('../../socket/socket');
+
+router.get('/socket/status', (req, res) => {
+    try {
+        const stats = getConnectionStats();
+        res.json({
+            success: true,
+            message: 'Socket.IO status',
+            data: stats || { message: 'Socket.IO not initialized' }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error getting socket status',
+            error: error.message
+        });
+    }
+});
+
+// ✅ Test broadcast endpoint
+router.post('/socket/test-broadcast', (req, res) => {
+    try {
+        const { roomId, event = 'testMessage', data } = req.body;
+        
+        if (!roomId) {
+            return res.status(400).json({
+                success: false,
+                message: 'roomId is required'
+            });
+        }
+
+        const testData = data || {
+            type: 'test',
+            message: 'Test broadcast from server',
+            timestamp: Date.now()
+        };
+
+        const success = broadcastToRoom(roomId, event, testData);
+        
+        res.json({
+            success,
+            message: success ? 'Broadcast sent successfully' : 'Failed to send broadcast',
+            sentTo: roomId,
+            event,
+            data: testData
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error sending broadcast',
+            error: error.message
+        });
+    }
+});
+
 router.use('/events', eventRouter);
 router.use('/categories', categoryRouter);
 router.use('/orders', orderRouter);
