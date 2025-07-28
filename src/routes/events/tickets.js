@@ -418,7 +418,7 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
 
     // Lấy chi tiết tất cả vé
     const tickets = await Ticket.find(filter)
-      .select('_id ticketId userId eventId showtimeId ticketNumber status createdAt qrCode price orderId')
+      .select('_id ticketId userId eventId showtimeId ticketNumber status createdAt qrCode price orderId seat zone')
       .populate('eventId', '_id name avatar location typeBase timeStart timeEnd')
       .populate('showtimeId', '_id startTime endTime')
       .populate('orderId', '_id totalPrice status createdAt')
@@ -442,17 +442,15 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
       zoneTicketMap = Object.fromEntries(zoneTickets.map(z => [z._id.toString(), z]));
     }
 
-    // Lấy thông tin zone (cho vé ghế)
-    const seatZoneIds = [];
-    tickets.forEach(t => {
-      if (t.seat && t.seat.zoneId) seatZoneIds.push(t.seat.zoneId);
-    });
-    let seatZoneMap = {};
-    if (seatZoneIds.length > 0) {
-      const seatZones = await ZoneModel.find({ _id: { $in: seatZoneIds } })
-        .select('_id name')
+    // Lấy thông tin zone (cho vé ghế) - lấy tất cả zones của event để tìm seat
+    const eventIds = [...new Set(tickets.map(t => t.eventId._id.toString()))];
+    let eventZonesMap = {};
+    
+    for (const eventId of eventIds) {
+      const zones = await ZoneModel.find({ eventId })
+        .select('_id name layout')
         .lean();
-      seatZoneMap = Object.fromEntries(seatZones.map(z => [z._id.toString(), z]));
+      eventZonesMap[eventId] = zones;
     }
 
     // Format response
@@ -493,15 +491,45 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
         // Xác định loại vé và zone
         let ticketType = '';
         let zoneName = '';
+        let seatId = '';
         
-        if (ticket.zone && ticket.zone.zoneId && zoneTicketMap[ticket.zone.zoneId.toString()]) {
-          const zoneTicket = zoneTicketMap[ticket.zone.zoneId.toString()];
+        // Kiểm tra nếu là zone ticket
+        if (ticket.zone && ticket.zone.zoneId) {
           ticketType = 'zone';
-          zoneName = zoneTicket.name;
-        } else if (ticket.seat && ticket.seat.zoneId && seatZoneMap[ticket.seat.zoneId.toString()]) {
-          const seatZone = seatZoneMap[ticket.seat.zoneId.toString()];
+          if (ticket.zone.zoneName) {
+            // Nếu đã có zoneName trong ticket
+            zoneName = ticket.zone.zoneName;
+          } else if (zoneTicketMap[ticket.zone.zoneId.toString()]) {
+            // Lấy từ zoneTicketMap
+            const zoneTicket = zoneTicketMap[ticket.zone.zoneId.toString()];
+            zoneName = zoneTicket.name;
+          }
+          seatId = '';
+        }
+        // Kiểm tra nếu là seat ticket
+        else if (ticket.seat && ticket.seat.seatId) {
           ticketType = 'seat';
-          zoneName = seatZone.name;
+          seatId = ticket.seat.seatId;
+          
+          // Tìm zone chứa seat này
+          const eventId = ticket.eventId._id.toString();
+          const zones = eventZonesMap[eventId] || [];
+          
+                     for (const zone of zones) {
+             if (zone.layout && zone.layout.seats && Array.isArray(zone.layout.seats)) {
+               const foundSeat = zone.layout.seats.find(seat => seat.seatId === ticket.seat.seatId);
+               if (foundSeat) {
+                 zoneName = zone.name;
+                 break;
+               }
+             }
+           }
+        }
+        // Nếu không phải zone hoặc seat ticket (typeBase = 'none')
+        else {
+          ticketType = 'none';
+          zoneName = '';
+          seatId = '';
         }
 
         return {
@@ -512,6 +540,9 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
           status: ticket.status,
           createdAt: ticket.createdAt,
           qrCode: ticket.qrCode,
+          ticketType: ticketType,
+          zoneName: zoneName,
+          seatId: seatId
         };
       }),
       summary: {
