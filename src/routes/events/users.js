@@ -10,7 +10,6 @@ const redis = require('../../redis/redisClient');
 const sgMail = require("@sendgrid/mail");
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const { sendNotification } = require('../../controllers/auth/sendNotification');
-const authenticate = require('../../middlewares/auth');
 const Event = require("../../models/events/eventModel");
 const forgotPasswordController = require('../../controllers/auth/forgotPasswordController');
 const { getEvents } = require('../../controllers/organizer/getEvents');
@@ -19,6 +18,7 @@ const { googleLogin } = require('../../controllers/auth/authController');
 const { default: slugify } = require('slugify');
 const tagModel = require('../../models/events/tagModel');
 const { cancelAllReservedSeats } = require('../../controllers/events/zoneController');
+const { authenticate } = require('../../middlewares/auth');
 // Login
 router.get("/all", async function (req, res) {
   const users = await userModel.find();

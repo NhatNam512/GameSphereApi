@@ -38,4 +38,51 @@ const authenticate = async(req, res, next) => {
       }
     };
 
-module.exports = authenticate;
+// Middleware auth optional - không bắt buộc phải có token
+const authenticateOptional = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    // Nếu không có token, vẫn cho phép đi tiếp nhưng req.user = null
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      req.user = null;
+      return next();
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    try {
+      // Xác minh token
+      const decoded = JWT.verify(token, tokenConfig.SECRETKEY);
+
+      // Lấy thông tin user từ DB
+      const user = await userModel.findById(decoded.id);
+      if (!user) {
+        req.user = null;
+        return next();
+      }
+
+      // Lưu thông tin user vào request
+      req.user = {
+        id: user._id,
+        email: user.email,
+        tags: user.tags,
+        location: user.location,
+        fcmTokens: user.fcmTokens,
+        username: user.username,
+        picUrl: user.picUrl
+      };
+
+      next();
+    } catch (err) {
+      // Token không hợp lệ, nhưng vẫn cho phép đi tiếp
+      req.user = null;
+      next();
+    }
+  } catch (err) {
+    req.user = null;
+    next();
+  }
+};
+
+module.exports = { authenticate, authenticateOptional };

@@ -11,7 +11,7 @@ const Showtime = require('../../models/events/showtimeModel');
 const mongoose = require('mongoose');
 const ticketController = require('../../controllers/events/ticketController');
 const eventModel = require('../../models/events/eventModel');
-const authenticate = require('../../middlewares/auth');
+const { authenticate } = require('../../middlewares/auth');
 
 router.get("/all", async function (req, res) {
     try{

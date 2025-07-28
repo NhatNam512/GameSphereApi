@@ -6,7 +6,6 @@ const eventModel = require('../../models/events/eventModel');
 const redis = require('../../redis/redisClient');
 const validate = require('../../middlewares/validation');
 const { eventSchema, eventTagsSchema } = require('../../validations/eventValidation');
-const authenticate = require('../../middlewares/auth');
 const { getRecommendedEvents } = require('../../controllers/events/recommendedEvents');
 const { addTagsToEvent } = require('../../controllers/events/tagController');
 const { getTopViewedEvents } = require('../../controllers/events/interactionController');
@@ -21,7 +20,7 @@ const tagModel = require('../../models/events/tagModel');
 const previewEventModel = require('../../models/events/previewEventModel');
 const { default: slugify } = require('slugify');
 const revenueController = require('../../controllers/events/revenueController');
-const authMiddleware = require('../../middlewares/auth');
+const { authenticateOptional, authenticate } = require('../../middlewares/auth');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -211,22 +210,12 @@ router.get("/home", async function (req, res) {
   }
 });
 
-router.get("/detail/:id", async function (req, res, next) {
+router.get("/detail/:id", authenticateOptional ,async function (req, res, next) {
   try {
     const { id } = req.params;
     
     // Lấy thông tin user từ token (optional)
-    let currentUserId = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = JWT.verify(token, config.privateKey);
-        currentUserId = decoded._id;
-      } catch (err) {
-        // Token không hợp lệ, bỏ qua và để currentUserId = null
-      }
-    }
+    let currentUserId = req.user.id;
 
     const cacheKey = `events_detail_${id}_${currentUserId || 'anonymous'}`;
     const cachedData = await redis.get(cacheKey);
