@@ -17,12 +17,24 @@ function initializeSocket(server) {
     io.on("connection", (socket) => {
         console.log(`🔗 Client kết nối: ${socket.id} | Transport: ${socket.conn.transport.name}`);
         
-        // ✅ Lưu thông tin client để debug
+        // ✅ Lưu thông tin client để debug - Thêm thông tin cho thiết bị thật
         socket.clientInfo = {
             connectedAt: new Date(),
             transport: socket.conn.transport.name,
-            userAgent: socket.handshake.headers['user-agent']
+            userAgent: socket.handshake.headers['user-agent'],
+            clientIP: socket.handshake.address,
+            origin: socket.handshake.headers.origin,
+            referer: socket.handshake.headers.referer
         };
+        
+        // ✅ Log chi tiết cho debug thiết bị thật
+        console.log(`📱 Client Details:`, {
+            id: socket.id,
+            transport: socket.conn.transport.name,
+            ip: socket.handshake.address,
+            userAgent: socket.handshake.headers['user-agent'],
+            origin: socket.handshake.headers.origin
+        });
 
         // ✅ Xử lý transport upgrade
         socket.conn.on('upgrade', () => {
@@ -57,13 +69,40 @@ function initializeSocket(server) {
             }
         });
 
-        // ✅ Enhanced error handling
+        // ✅ Enhanced error handling - Thêm logs chi tiết cho mobile
         socket.on("connect_error", (error) => {
-            console.error(`❌ Socket connection error [${socket.id}]:`, error.message);
+            console.error(`❌ Socket connection error [${socket.id}]:`, {
+                message: error.message,
+                type: error.type,
+                description: error.description,
+                context: error.context,
+                clientInfo: socket.clientInfo
+            });
         });
 
         socket.on("error", (error) => {
-            console.error(`❌ Socket error [${socket.id}]:`, error.message);
+            console.error(`❌ Socket error [${socket.id}]:`, {
+                message: error.message,
+                stack: error.stack,
+                clientInfo: socket.clientInfo
+            });
+        });
+        
+        // ✅ Thêm handler cho mobile network issues
+        socket.on("reconnect_attempt", (attemptNumber) => {
+            console.log(`🔄 Socket ${socket.id} attempting reconnect #${attemptNumber}`);
+        });
+        
+        socket.on("reconnect", (attemptNumber) => {
+            console.log(`✅ Socket ${socket.id} reconnected after ${attemptNumber} attempts`);
+        });
+        
+        socket.on("reconnect_error", (error) => {
+            console.error(`❌ Socket ${socket.id} reconnect error:`, error.message);
+        });
+        
+        socket.on("reconnect_failed", () => {
+            console.error(`❌ Socket ${socket.id} failed to reconnect`);
         });
 
         socket.on("disconnect", (reason) => {
@@ -85,11 +124,38 @@ function initializeSocket(server) {
         });
     });
 
-    // Thêm log toàn cục cho kết nối
+    // ✅ Enhanced global connection error handling cho thiết bị thật
     io.engine.on("connection_error", (err) => {
-        console.log("Lỗi kết nối socket toàn cục:", err.message);
-        console.log("Mã lỗi:", err.code);
-        console.log("Chi tiết lỗi:", err);
+        console.error("🚨 Global Socket Connection Error:", {
+            message: err.message,
+            code: err.code,
+            type: err.type,
+            req: {
+                url: err.req?.url,
+                headers: {
+                    userAgent: err.req?.headers?.['user-agent'],
+                    origin: err.req?.headers?.origin,
+                    referer: err.req?.headers?.referer
+                },
+                method: err.req?.method,
+                ip: err.req?.connection?.remoteAddress
+            },
+            context: err.context,
+            description: err.description
+        });
+    });
+    
+    // ✅ Thêm middleware để log tất cả connections attempts
+    io.use((socket, next) => {
+        console.log(`🔍 Connection attempt from:`, {
+            id: socket.id,
+            ip: socket.handshake.address,
+            userAgent: socket.handshake.headers['user-agent'],
+            origin: socket.handshake.headers.origin,
+            transport: socket.conn.transport.name,
+            timestamp: new Date().toISOString()
+        });
+        next();
     });
 
     // Bắt đầu gửi tin nhắn định kỳ sau khi socket được khởi tạo

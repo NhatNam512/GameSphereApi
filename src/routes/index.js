@@ -19,29 +19,47 @@ var gamesRouter = require('./games/games');
 var categoriesGamesRouter = require('./games/categoriesGames');
 var previewGameRouter = require('./games/previewGame');
 
-// ✅ Debug endpoint cho Socket.IO
-const { getSocketIO, getConnectionStats, broadcastToRoom } = require('../../socket/socket');
-
+// ✅ Socket Debug Routes - Thêm để test socket trên thiết bị thật
 router.get('/socket/status', (req, res) => {
-    try {
-        const stats = getConnectionStats();
-        res.json({
-            success: true,
-            message: 'Socket.IO status',
-            data: stats || { message: 'Socket.IO not initialized' }
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Error getting socket status',
-            error: error.message
-        });
-    }
+  try {
+    const { getSocketIO, getConnectionStats } = require('../../socket/socket');
+    const io = getSocketIO();
+    const stats = getConnectionStats();
+    
+    res.json({
+      success: true,
+      message: 'Socket.IO is running',
+      stats: stats,
+      server: {
+        environment: process.env.NODE_ENV || 'development',
+        port: process.env.PORT || 3000,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Socket.IO not initialized',
+      error: error.message
+    });
+  }
 });
 
-// ✅ Test broadcast endpoint
+// Test endpoint cho mobile
+router.get('/socket/mobile-test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Server is reachable from mobile',
+    serverTime: new Date().toISOString(),
+    serverIP: req.ip,
+    userAgent: req.get('User-Agent'),
+    headers: req.headers
+  });
+});
+
 router.post('/socket/test-broadcast', (req, res) => {
     try {
+        const { broadcastToRoom } = require('../../socket/socket');
         const { roomId, event = 'testMessage', data } = req.body;
         
         if (!roomId) {
