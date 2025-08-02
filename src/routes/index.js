@@ -93,6 +93,77 @@ router.post('/socket/test-broadcast', (req, res) => {
     }
 });
 
+// ✅ Socket.IO statistics endpoint cho APK debugging
+router.get('/socket/stats', (req, res) => {
+  try {
+    const { getConnectionStats } = require('../../socket/socket');
+    const stats = getConnectionStats();
+    
+    if (!stats) {
+      return res.status(503).json({
+        error: 'Socket.IO not initialized',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Enhanced stats với APK information
+    const enhancedStats = {
+      ...stats,
+      serverInfo: {
+        environment: process.env.NODE_ENV || 'development',
+        uptime: Math.floor(process.uptime()),
+        nodeVersion: process.version,
+        platform: process.platform
+      },
+      socketConfig: {
+        heartbeatInterval: process.env.SOCKET_PING_INTERVAL || 'default',
+        debugEnabled: process.env.SOCKET_DEBUG === 'true',
+        rateLimitEnabled: process.env.RATE_LIMIT !== 'false'
+      }
+    };
+
+    res.json(enhancedStats);
+  } catch (error) {
+    console.error('Error getting socket stats:', error);
+    res.status(500).json({
+      error: 'Failed to get socket statistics',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ✅ Socket.IO connection test endpoint cho APK
+router.post('/socket/test', (req, res) => {
+  const { getSocketIO } = require('../../socket/socket');
+  
+  try {
+    const io = getSocketIO();
+    const testData = {
+      message: 'Server-side connection test',
+      timestamp: Date.now(),
+      clientInfo: req.body
+    };
+
+    // Broadcast test message to all connected clients
+    io.emit('serverConnectionTest', testData);
+
+    res.json({
+      status: 'success',
+      message: 'Test message broadcasted to all clients',
+      data: testData,
+      connectedClients: io.engine.clientsCount
+    });
+  } catch (error) {
+    console.error('Socket connection test error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      timestamp: Date.now()
+    });
+  }
+});
+
 router.use('/events', eventRouter);
 router.use('/categories', categoryRouter);
 router.use('/orders', orderRouter);

@@ -14,45 +14,74 @@ function initializeSocket(server) {
     
     io = new Server(server, config);
 
+    // ✅ Log cấu hình cho APK debugging
+    console.log('🚀 Socket.IO Server Starting with APK Support:', {
+        environment: process.env.NODE_ENV || 'development',
+        transports: config.transports,
+        pingTimeout: config.pingTimeout,
+        pingInterval: config.pingInterval,
+        connectTimeout: config.connectTimeout,
+        corsOrigin: typeof config.cors.origin === 'function' ? 'Dynamic CORS' : config.cors.origin
+    });
+
     io.on("connection", (socket) => {
         console.log(`🔗 Client kết nối: ${socket.id} | Transport: ${socket.conn.transport.name}`);
         
-        // ✅ Lưu thông tin client để debug - Thêm thông tin cho thiết bị thật
+        // ✅ Enhanced client info cho APK debugging
         socket.clientInfo = {
             connectedAt: new Date(),
             transport: socket.conn.transport.name,
             userAgent: socket.handshake.headers['user-agent'],
             clientIP: socket.handshake.address,
             origin: socket.handshake.headers.origin,
-            referer: socket.handshake.headers.referer
+            referer: socket.handshake.headers.referer,
+            // ✅ Detect mobile/APK clients
+            isMobile: /mobile|android|iphone|ipad/i.test(socket.handshake.headers['user-agent'] || ''),
+            isAPK: !socket.handshake.headers.origin || socket.handshake.headers['x-client-type'] === 'mobile-app'
         };
         
-        // ✅ Log chi tiết cho debug thiết bị thật
+        // ✅ Enhanced logging cho APK debugging
         console.log(`📱 Client Details:`, {
             id: socket.id,
             transport: socket.conn.transport.name,
             ip: socket.handshake.address,
             userAgent: socket.handshake.headers['user-agent'],
-            origin: socket.handshake.headers.origin
+            origin: socket.handshake.headers.origin || 'No Origin (Possible APK)',
+            isMobile: socket.clientInfo.isMobile,
+            isAPK: socket.clientInfo.isAPK,
+            clientType: socket.handshake.headers['x-client-type'] || 'unknown'
         });
 
-        // ✅ Xử lý transport upgrade
+        // ✅ APK-specific connection success event
+        if (socket.clientInfo.isAPK) {
+            console.log(`📱 APK Client Connected: ${socket.id}`);
+            socket.emit('apkConnectionConfirmed', {
+                socketId: socket.id,
+                serverTime: new Date().toISOString(),
+                message: 'APK successfully connected to Socket.IO server'
+            });
+        }
+
+        // ✅ Xử lý transport upgrade với APK logging
         socket.conn.on('upgrade', () => {
             console.log(`🔄 ${socket.id} upgraded to ${socket.conn.transport.name}`);
+            if (socket.clientInfo.isAPK) {
+                console.log(`📱 APK ${socket.id} transport upgraded successfully`);
+            }
         });
 
         // ✅ Nhận userId từ phía client và join vào room
         socket.on("joinRoom", (userId) => {
             socket.userId = userId;
             socket.join(userId); // User room
-            console.log(`👤 User ${userId} joined personal room | Socket: ${socket.id}`);
+            console.log(`👤 User ${userId} joined personal room | Socket: ${socket.id} | Client: ${socket.clientInfo.isAPK ? 'APK' : 'Web'}`);
         });
 
         // ✅ Join group room để nhận location updates
         socket.on("joinGroup", (groupId) => {
             if (!groupId) return;
             socket.join(`group_${groupId}`);
-            console.log(`👥 Socket ${socket.id} joined group_${groupId}`);
+            console.log(`👥 Socket ${socket.id} joined group_${groupId} | Client: ${socket.clientInfo.isAPK ? 'APK' : 'Web'}`);
         });
 
         // ✅ Leave group room
@@ -62,16 +91,41 @@ function initializeSocket(server) {
             console.log(`👥 Socket ${socket.id} left group_${groupId}`);
         });
 
-        // ✅ Heartbeat cho mobile - client gửi ping
+        // ✅ Enhanced heartbeat cho APK - client gửi ping
         socket.on("ping", (callback) => {
+            const timestamp = Date.now();
             if (typeof callback === 'function') {
-                callback('pong');
+                callback({
+                    pong: 'pong',
+                    serverTime: timestamp,
+                    clientType: socket.clientInfo.isAPK ? 'APK' : 'Web'
+                });
+            }
+            
+            // Log ping từ APK clients
+            if (socket.clientInfo.isAPK && socketConfig.enableLogging) {
+                console.log(`💓 APK Ping received from ${socket.id}`);
             }
         });
 
-        // ✅ Enhanced error handling - Thêm logs chi tiết cho mobile
+        // ✅ APK Connection Test - để APK kiểm tra kết nối
+        socket.on("apkConnectionTest", (data, callback) => {
+            console.log(`🧪 APK Connection Test from ${socket.id}:`, data);
+            if (typeof callback === 'function') {
+                callback({
+                    status: 'success',
+                    socketId: socket.id,
+                    serverTime: Date.now(),
+                    message: 'APK connection test successful',
+                    received: data,
+                    transport: socket.conn.transport.name
+                });
+            }
+        });
+
+        // ✅ Enhanced error handling cho APK
         socket.on("connect_error", (error) => {
-            console.error(`❌ Socket connection error [${socket.id}]:`, {
+            console.error(`❌ Socket connection error [${socket.id}] ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'}:`, {
                 message: error.message,
                 type: error.type,
                 description: error.description,
@@ -81,50 +135,62 @@ function initializeSocket(server) {
         });
 
         socket.on("error", (error) => {
-            console.error(`❌ Socket error [${socket.id}]:`, {
+            console.error(`❌ Socket error [${socket.id}] ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'}:`, {
                 message: error.message,
                 stack: error.stack,
                 clientInfo: socket.clientInfo
             });
         });
         
-        // ✅ Thêm handler cho mobile network issues
+        // ✅ Enhanced mobile network issues handling
         socket.on("reconnect_attempt", (attemptNumber) => {
-            console.log(`🔄 Socket ${socket.id} attempting reconnect #${attemptNumber}`);
+            console.log(`🔄 Socket ${socket.id} ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'} attempting reconnect #${attemptNumber}`);
         });
         
         socket.on("reconnect", (attemptNumber) => {
-            console.log(`✅ Socket ${socket.id} reconnected after ${attemptNumber} attempts`);
+            console.log(`✅ Socket ${socket.id} ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'} reconnected after ${attemptNumber} attempts`);
+            
+            // Gửi thông báo reconnect thành công cho APK
+            if (socket.clientInfo.isAPK) {
+                socket.emit('apkReconnected', {
+                    socketId: socket.id,
+                    attempts: attemptNumber,
+                    serverTime: new Date().toISOString()
+                });
+            }
         });
         
         socket.on("reconnect_error", (error) => {
-            console.error(`❌ Socket ${socket.id} reconnect error:`, error.message);
+            console.error(`❌ Socket ${socket.id} ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'} reconnect error:`, error.message);
         });
         
         socket.on("reconnect_failed", () => {
-            console.error(`❌ Socket ${socket.id} failed to reconnect`);
+            console.error(`❌ Socket ${socket.id} ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'} failed to reconnect`);
         });
 
         socket.on("disconnect", (reason) => {
             const duration = socket.clientInfo ? 
                 Math.round((Date.now() - socket.clientInfo.connectedAt.getTime()) / 1000) : 0;
-            console.log(`🔌 Client disconnected: ${socket.id} | Reason: ${reason} | Duration: ${duration}s`);
+            console.log(`🔌 Client disconnected: ${socket.id} ${socket.clientInfo.isAPK ? '[APK]' : '[WEB]'} | Reason: ${reason} | Duration: ${duration}s`);
         });
 
-        // ✅ Test connection - để client kiểm tra kết nối
+        // ✅ Enhanced test connection cho APK
         socket.on("testConnection", (data, callback) => {
             if (typeof callback === 'function') {
                 callback({
                     status: 'ok',
                     socketId: socket.id,
                     timestamp: Date.now(),
-                    received: data
+                    received: data,
+                    clientType: socket.clientInfo.isAPK ? 'APK' : 'Web',
+                    transport: socket.conn.transport.name,
+                    serverEnvironment: process.env.NODE_ENV || 'development'
                 });
             }
         });
     });
 
-    // ✅ Enhanced global connection error handling cho thiết bị thật
+    // ✅ Enhanced global connection error handling cho APK
     io.engine.on("connection_error", (err) => {
         console.error("🚨 Global Socket Connection Error:", {
             message: err.message,
@@ -134,26 +200,34 @@ function initializeSocket(server) {
                 url: err.req?.url,
                 headers: {
                     userAgent: err.req?.headers?.['user-agent'],
-                    origin: err.req?.headers?.origin,
-                    referer: err.req?.headers?.referer
+                    origin: err.req?.headers?.origin || 'No Origin (Possible APK)',
+                    referer: err.req?.headers?.referer,
+                    clientType: err.req?.headers?.['x-client-type']
                 },
                 method: err.req?.method,
                 ip: err.req?.connection?.remoteAddress
             },
             context: err.context,
-            description: err.description
+            description: err.description,
+            isPossibleAPK: !err.req?.headers?.origin
         });
     });
     
-    // ✅ Thêm middleware để log tất cả connections attempts
+    // ✅ Enhanced middleware cho APK connection logging
     io.use((socket, next) => {
-        console.log(`🔍 Connection attempt from:`, {
+        const isAPK = !socket.handshake.headers.origin || socket.handshake.headers['x-client-type'] === 'mobile-app';
+        const isMobile = /mobile|android|iphone|ipad/i.test(socket.handshake.headers['user-agent'] || '');
+        
+        console.log(`🔍 Connection attempt ${isAPK ? '[APK]' : '[WEB]'}:`, {
             id: socket.id,
             ip: socket.handshake.address,
             userAgent: socket.handshake.headers['user-agent'],
-            origin: socket.handshake.headers.origin,
+            origin: socket.handshake.headers.origin || 'No Origin (APK)',
             transport: socket.conn.transport.name,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            isAPK,
+            isMobile,
+            clientType: socket.handshake.headers['x-client-type'] || 'unknown'
         });
         next();
     });
@@ -171,14 +245,14 @@ function getSocketIO() {
     return io;
 }
 
-// ✅ Heartbeat system tối ưu cho mobile
+// ✅ Enhanced heartbeat system cho APK
 function startPeriodicMessage() {
     // Xóa interval cũ nếu có
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
     }
 
-    // Tạo interval mới - giảm xuống 2 phút cho mobile
+    // Tạo interval mới - tối ưu cho APK
     heartbeatInterval = setInterval(() => {
         if (!io) return;
 
@@ -190,11 +264,13 @@ function startPeriodicMessage() {
             type: 'heartbeat',
             serverTime: currentTime,
             timestamp: Date.now(),
-            connectedClients: connectedClients
+            connectedClients: connectedClients,
+            environment: process.env.NODE_ENV || 'development'
         };
 
-        // Chỉ gửi heartbeat, không gửi message không cần thiết
+        // Enhanced heartbeat cho APK clients
         io.emit('serverHeartbeat', heartbeat);
+        
         if (socketConfig.enableLogging) {
             console.log(`💓 Server heartbeat sent to ${connectedClients} clients - ${currentTime}`);
         }
