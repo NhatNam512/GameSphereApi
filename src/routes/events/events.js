@@ -215,7 +215,7 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
     const { id } = req.params;
     
     // Lấy thông tin user từ token (optional)
-    let currentUserId = req.user.id;
+    let currentUserId = req.user ? req.user.id : null;
 
     const cacheKey = `events_detail_${id}_${currentUserId || 'anonymous'}`;
     const cachedData = await redis.get(cacheKey);
