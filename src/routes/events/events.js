@@ -138,7 +138,7 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find()
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
       .populate("userId", "username picUrl")
       .lean();
     console.timeEnd("🗃️ DB Query");
@@ -507,7 +507,13 @@ router.post("/add", async function (req, res, next) {
     pub.publish("event_updates", JSON.stringify(newEvent));
     res.status(200).json({
       status: true,
-      message: "Thêm sự kiện thành công"
+      message: "Thêm sự kiện thành công",
+      data: {
+        _id: newEvent._id,
+        name: newEvent.name,
+        createdAt: newEvent.createdAt,
+        updatedAt: newEvent.updatedAt
+      }
     });
   } catch (error) {
     await session.abortTransaction();
@@ -668,7 +674,16 @@ router.put("/edit", async function (req, res, next) {
       await redis.del(`getEvents:${itemUpdate.userId}`);
       await redis.del(`events_detail_${id}`)
     }
-    res.status(200).json({ status: true, message: "Successfully updated" });
+    res.status(200).json({ 
+      status: true, 
+      message: "Successfully updated",
+      data: {
+        _id: itemUpdate._id,
+        name: itemUpdate.name,
+        createdAt: itemUpdate.createdAt,
+        updatedAt: itemUpdate.updatedAt
+      }
+    });
 
   } catch (e) {
     await session.abortTransaction();
