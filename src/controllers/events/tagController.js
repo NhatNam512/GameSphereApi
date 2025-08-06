@@ -23,7 +23,6 @@ exports.suggestTags = async (req, res) => {
     const slugSearch = slugify(search, { lower: true, strict: true });
     const tags = await Tag.find({ slug: { $regex: slugSearch, $options: 'i' } })
       .sort({ slug: 1 })
-      .limit(20);
     res.json(tags.map(tag => tag.name));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi lấy tag', error: err.message });
