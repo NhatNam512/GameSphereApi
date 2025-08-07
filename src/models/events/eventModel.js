@@ -20,6 +20,10 @@ const events = new schema({
         enum: ['pending', 'approved', 'rejected'], 
         default: 'pending' 
     },
+    approvalReason: { 
+        type: String, 
+        default: '' 
+    },
     rating: { type: Number },
     
     longitude: { type: Number },

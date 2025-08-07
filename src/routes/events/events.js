@@ -864,8 +864,9 @@ router.put('/approve/:eventId', async function (req, res) {
       });
     }
 
-    // Cập nhật trạng thái duyệt
+    // Cập nhật trạng thái duyệt và lý do
     event.approvalStatus = approvalStatus;
+    event.approvalReason = reason || '';
     await event.save();
 
     // Xóa cache home khi duyệt thành công
@@ -878,6 +879,11 @@ router.put('/approve/:eventId', async function (req, res) {
     const pendingCacheKeys = await redis.keys("events_pending_approval_*");
     if (pendingCacheKeys.length > 0) {
       await redis.del(...pendingCacheKeys);
+    }
+    
+    // Xóa cache getEvents của organizer để cập nhật trạng thái duyệt
+    if (event.userId) {
+      await redis.del(`getEvents:${event.userId._id}`);
     }
 
     // Thông báo qua socket về việc duyệt

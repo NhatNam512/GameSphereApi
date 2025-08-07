@@ -87,7 +87,7 @@ exports.getEvents = async (req, res) => {
     if (cached) return res.status(200).json(JSON.parse(cached));
 
     // 1. Lấy tất cả events của user
-    const events = await eventModel.find({ userId }).select("_id name typeBase timeStart timeEnd ticketPrice avatar location location_map createdAt").lean();
+    const events = await eventModel.find({ userId }).select("_id name typeBase timeStart timeEnd ticketPrice avatar location location_map createdAt approvalStatus approvalReason").lean();
     const eventIds = events.map(e => e._id);
 
     // 2. Lấy tất cả showtimes, zones, zoneTickets, seatBookings, tickets, orders cho các event này
@@ -150,7 +150,13 @@ exports.getEvents = async (req, res) => {
         eventTotalRevenue,
         revenueByDay,
         revenueByMonth,
-        revenueByYear
+        revenueByYear,
+        // Thông tin trạng thái duyệt
+        approval: {
+          status: event.approvalStatus || 'pending',
+          reason: event.approvalReason || '',
+          statusText: getApprovalStatusText(event.approvalStatus)
+        }
       };
     }));
 
@@ -159,6 +165,14 @@ exports.getEvents = async (req, res) => {
     const totalRevenueByMonth = groupRevenueByDate(allOrders, 'month');
     const totalRevenueByYear = groupRevenueByDate(allOrders, 'year');
 
+    // Thống kê trạng thái duyệt
+    const approvalStats = {
+      pending: events.filter(e => e.approvalStatus === 'pending').length,
+      approved: events.filter(e => e.approvalStatus === 'approved').length,
+      rejected: events.filter(e => e.approvalStatus === 'rejected').length,
+      total: events.length
+    };
+
     const response = {
       status: 200,
       totalTicketsSold,
@@ -166,7 +180,8 @@ exports.getEvents = async (req, res) => {
       events: eventsWithDetails,
       totalRevenueByDay,
       totalRevenueByMonth,
-      totalRevenueByYear
+      totalRevenueByYear,
+      approvalStats
     };
     await redisClient.set(cacheKey, JSON.stringify(response), 'EX', 300);
     res.status(200).json(response);
@@ -174,6 +189,16 @@ exports.getEvents = async (req, res) => {
     console.error("❌ getEvents error:", e);
     res.status(400).json({ status: false, message: "Error: " + e.message });
   }
+};
+
+// Helper function để trả về text hiển thị cho trạng thái duyệt
+const getApprovalStatusText = (status) => {
+  const statusMap = {
+    'pending': 'Chờ duyệt',
+    'approved': 'Đã duyệt',
+    'rejected': 'Bị từ chối'
+  };
+  return statusMap[status] || 'Không xác định';
 };
 
 
