@@ -94,15 +94,23 @@ router.delete("/:eventId",  async (req, res) => {
 
 router.get("/all", async function (req, res) {
   try {
-    const { approvalStatus = 'approved' } = req.query;
-    const cacheKey = `events_${approvalStatus}`;
+    const { showAll } = req.query;
+    let filter = {};
+    let cacheKey = "events_public";
+    
+    // Nếu có showAll=true thì lấy tất cả (cho admin), nếu không thì filter
+    if (!showAll || showAll !== 'true') {
+      filter = { approvalStatus: { $nin: ['pending', 'rejected'] } };
+    } else {
+      cacheKey = "events_all_admin";
+    }
+    
     const cachedData = await redis.get(cacheKey);
 
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
 
-    const filter = { approvalStatus };
     const events = await eventModel.find(filter);
     await redis.set(cacheKey, JSON.stringify(events));
     res.status(200).json({
@@ -140,7 +148,9 @@ router.get("/home", async function (req, res) {
     }
 
     console.time("🗃️ DB Query");
-    const events = await eventModel.find({ approvalStatus: 'approved' })
+    const events = await eventModel.find({ 
+      approvalStatus: { $nin: ['pending', 'rejected'] }
+    })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
       .populate("userId", "username picUrl")
       .lean();
@@ -368,7 +378,10 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
 router.get("/categories/:id", async function (req,  res) {
   try{
     const {id} = req.params;
-    var categories = await eventModel.find({categories: id, approvalStatus: 'approved'});
+    var categories = await eventModel.find({
+      categories: id, 
+      approvalStatus: { $nin: ['pending', 'rejected'] }
+    });
     if(categories.length>0){
       res.status(200).json({
         status: true,
@@ -700,7 +713,7 @@ router.get("/search", async function (req, res) {
     const skip = (Number(page) - 1) * Number(limit);
 
     const matchCondition = {
-      approvalStatus: 'approved', // Chỉ search trong sự kiện đã duyệt
+      approvalStatus: { $nin: ['pending', 'rejected'] }, // Loại trừ pending và rejected
       $or: [
         { name: { $regex: query, $options: "i" } },
       ],
@@ -768,6 +781,9 @@ router.post("/sort", async function (req, res) {
   try {
     const { categories, ticketPrice, timeStart } = req.body;
     const filter = {};
+
+    // Luôn loại trừ sự kiện pending và rejected
+    filter.approvalStatus = { $nin: ['pending', 'rejected'] };
 
     // Thêm điều kiện lọc cho categories nếu có
     if (categories) {
@@ -872,7 +888,8 @@ router.put('/approve/:eventId', async function (req, res) {
     // Xóa cache home khi duyệt thành công
     if (approvalStatus === 'approved') {
       await redis.del("events_home");
-      await redis.del("events");
+      await redis.del("events_public");
+      await redis.del("events_all_admin");
     }
     
     // Xóa cache pending approval để refresh danh sách
