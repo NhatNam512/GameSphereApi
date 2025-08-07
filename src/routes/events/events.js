@@ -21,6 +21,7 @@ const previewEventModel = require('../../models/events/previewEventModel');
 const { default: slugify } = require('slugify');
 const revenueController = require('../../controllers/events/revenueController');
 const { authenticateOptional, authenticate } = require('../../middlewares/auth');
+const { broadcastEventApproval } = require('../../../socket/socket');
 
 const pub = redis.duplicate(); // Redis Publisher
 const sub = redis.duplicate();
@@ -93,14 +94,16 @@ router.delete("/:eventId",  async (req, res) => {
 
 router.get("/all", async function (req, res) {
   try {
-    const cacheKey = "events";
+    const { approvalStatus = 'approved' } = req.query;
+    const cacheKey = `events_${approvalStatus}`;
     const cachedData = await redis.get(cacheKey);
 
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
 
-    const events = await eventModel.find();
+    const filter = { approvalStatus };
+    const events = await eventModel.find(filter);
     await redis.set(cacheKey, JSON.stringify(events));
     res.status(200).json({
       status: true,
@@ -137,7 +140,7 @@ router.get("/home", async function (req, res) {
     }
 
     console.time("🗃️ DB Query");
-    const events = await eventModel.find()
+    const events = await eventModel.find({ approvalStatus: 'approved' })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
       .populate("userId", "username picUrl")
       .lean();
@@ -365,7 +368,7 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
 router.get("/categories/:id", async function (req,  res) {
   try{
     const {id} = req.params;
-    var categories = await eventModel.find({categories: id});
+    var categories = await eventModel.find({categories: id, approvalStatus: 'approved'});
     if(categories.length>0){
       res.status(200).json({
         status: true,
@@ -697,6 +700,7 @@ router.get("/search", async function (req, res) {
     const skip = (Number(page) - 1) * Number(limit);
 
     const matchCondition = {
+      approvalStatus: 'approved', // Chỉ search trong sự kiện đã duyệt
       $or: [
         { name: { $regex: query, $options: "i" } },
       ],
@@ -815,5 +819,149 @@ router.put('/add-zone', async function (req, res) {
 });
 
 router.get('/getEstimatedRevenue/:eventId', revenueController.getEstimatedRevenue);
+
+// API duyệt sự kiện
+router.put('/approve/:eventId', async function (req, res) {
+  try {
+    const { eventId } = req.params;
+    const { approvalStatus, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ 
+        status: false, 
+        message: "eventId không hợp lệ" 
+      });
+    }
+
+    if (!['approved', 'rejected'].includes(approvalStatus)) {
+      return res.status(400).json({ 
+        status: false, 
+        message: "approvalStatus phải là 'approved' hoặc 'rejected'" 
+      });
+    }
+
+    const event = await eventModel.findById(eventId).populate('userId', 'username');
+    if (!event) {
+      return res.status(404).json({ 
+        status: false, 
+        message: "Không tìm thấy sự kiện" 
+      });
+    }
+
+    // Cập nhật trạng thái duyệt
+    event.approvalStatus = approvalStatus;
+    await event.save();
+
+    // Xóa cache home khi duyệt thành công
+    if (approvalStatus === 'approved') {
+      await redis.del("events_home");
+      await redis.del("events");
+    }
+    
+    // Xóa cache pending approval để refresh danh sách
+    const pendingCacheKeys = await redis.keys("events_pending_approval_*");
+    if (pendingCacheKeys.length > 0) {
+      await redis.del(...pendingCacheKeys);
+    }
+
+    // Thông báo qua socket về việc duyệt
+    const socketMessage = {
+      type: 'EVENT_APPROVAL',
+      eventId: event._id,
+      eventName: event.name,
+      approvalStatus: approvalStatus,
+      approvedBy: req.user.id,
+      reason: reason || '',
+      organizerId: event.userId._id,
+      timestamp: new Date()
+    };
+
+    // Gửi thông báo qua Redis pub/sub
+    await pub.publish("event_updates", JSON.stringify(socketMessage));
+    
+    // Gửi thông báo trực tiếp qua Socket.IO cho organizer
+    try {
+      broadcastEventApproval(event.userId._id.toString(), socketMessage);
+    } catch (socketError) {
+      console.error("❌ Socket broadcast error:", socketError.message);
+      // Không throw error vì API vẫn thành công, chỉ socket bị lỗi
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: `${approvalStatus === 'approved' ? 'Duyệt' : 'Từ chối'} sự kiện thành công`,
+      data: {
+        eventId: event._id,
+        eventName: event.name,
+        approvalStatus: event.approvalStatus,
+        approvedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error approving event:", error);
+    return res.status(500).json({ 
+      status: false, 
+      message: "Lỗi hệ thống", 
+      error: error.message 
+    });
+  }
+});
+
+// API lấy danh sách sự kiện chưa duyệt
+router.get('/pending-approval', async function (req, res) {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const cacheKey = `events_pending_approval_${page}_${limit}`;
+    const cachedData = await redis.get(cacheKey);
+
+    if (cachedData) {
+      return res.status(200).json({
+        status: true,
+        message: "Lấy danh sách sự kiện chưa duyệt thành công (từ cache)",
+        data: JSON.parse(cachedData)
+      });
+    }
+
+    const totalPendingEvents = await eventModel.countDocuments({ approvalStatus: 'pending' });
+
+    const pendingEvents = await eventModel.find({ approvalStatus: 'pending' })
+      .select("_id name timeStart timeEnd avatar banner categories location userId createdAt approvalStatus")
+      .populate("userId", "username picUrl")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    const result = {
+      events: pendingEvents,
+      pagination: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalPendingEvents / Number(limit)),
+        totalEvents: totalPendingEvents,
+        hasMore: skip + pendingEvents.length < totalPendingEvents
+      }
+    };
+
+    // Cache trong 2 phút
+    await redis.set(cacheKey, JSON.stringify(result), 'EX', 120);
+
+    return res.status(200).json({
+      status: true,
+      message: "Lấy danh sách sự kiện chưa duyệt thành công",
+      data: result
+    });
+
+  } catch (error) {
+    console.error("❌ Error getting pending events:", error);
+    return res.status(500).json({ 
+      status: false, 
+      message: "Lỗi hệ thống", 
+      error: error.message 
+    });
+  }
+});
 
 module.exports = router;

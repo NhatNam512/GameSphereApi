@@ -306,6 +306,36 @@ function broadcastToRoom(roomId, event, data) {
     }
 }
 
+// ✅ Broadcast event approval notification
+function broadcastEventApproval(organizerId, approvalData) {
+    if (!io) {
+        console.error('❌ Socket.IO not initialized for event approval broadcast');
+        return false;
+    }
+    
+    try {
+        // Gửi cho organizer cụ thể
+        io.to(organizerId).emit('eventApprovalUpdate', {
+            ...approvalData,
+            timestamp: new Date().toISOString()
+        });
+
+        // Gửi broadcast chung cho admin/moderator nếu cần
+        io.emit('eventApprovalNotification', {
+            type: 'EVENT_APPROVAL_UPDATE',
+            eventId: approvalData.eventId,
+            status: approvalData.approvalStatus,
+            timestamp: new Date().toISOString()
+        });
+
+        console.log(`📋 Event approval broadcast sent | Event: ${approvalData.eventId} | Status: ${approvalData.approvalStatus} | Organizer: ${organizerId}`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Error broadcasting event approval:`, error.message);
+        return false;
+    }
+}
+
 // ✅ Cleanup function khi server shutdown
 function cleanup() {
     if (heartbeatInterval) {
@@ -328,5 +358,6 @@ module.exports = {
     getSocketIO, 
     getConnectionStats, 
     broadcastToRoom, 
+    broadcastEventApproval,
     cleanup 
 };

@@ -15,6 +15,11 @@ const events = new schema({
     tags: { type: [oid], ref: 'tags', index: true },
 
     status: { type: String },
+    approvalStatus: { 
+        type: String, 
+        enum: ['pending', 'approved', 'rejected'], 
+        default: 'pending' 
+    },
     rating: { type: Number },
     
     longitude: { type: Number },
@@ -49,6 +54,7 @@ events.index({ timeStart: 1 });
 events.index({ categories: 1 });
 events.index({ userId: 1 });
 events.index({ status: 1 });
+events.index({ approvalStatus: 1 });
 events.index({ name: 1 });
 events.index({ description: 1 });
 events.index({ tags: 1 });
