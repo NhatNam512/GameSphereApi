@@ -826,6 +826,14 @@ router.put('/approve/:eventId', async function (req, res) {
     const { eventId } = req.params;
     const { approvalStatus, reason } = req.body;
 
+    // Debug logging
+    console.log('🔍 Approve Event Debug:', {
+      eventId,
+      approvalStatus,
+      approvalStatusType: typeof approvalStatus,
+      body: req.body
+    });
+
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
       return res.status(400).json({ 
         status: false, 
@@ -833,10 +841,18 @@ router.put('/approve/:eventId', async function (req, res) {
       });
     }
 
+    // Improved validation with more detailed error message
+    if (!approvalStatus) {
+      return res.status(400).json({ 
+        status: false, 
+        message: "approvalStatus là bắt buộc" 
+      });
+    }
+
     if (!['approved', 'rejected'].includes(approvalStatus)) {
       return res.status(400).json({ 
         status: false, 
-        message: "approvalStatus phải là 'approved' hoặc 'rejected'" 
+        message: `approvalStatus phải là 'approved' hoặc 'rejected', nhận được: '${approvalStatus}'`
       });
     }
 
@@ -870,7 +886,7 @@ router.put('/approve/:eventId', async function (req, res) {
       eventId: event._id,
       eventName: event.name,
       approvalStatus: approvalStatus,
-      approvedBy: req.user.id,
+      approvedBy: req.user ? req.user.id : 'admin', // Handle khi không có user
       reason: reason || '',
       organizerId: event.userId._id,
       timestamp: new Date()
@@ -906,6 +922,27 @@ router.put('/approve/:eventId', async function (req, res) {
       error: error.message 
     });
   }
+});
+
+// API test approval (chỉ để test)
+router.post('/test-approve/:eventId', async function (req, res) {
+  const { eventId } = req.params;
+  const { action = 'approved' } = req.body;
+  
+  return res.status(200).json({
+    status: true,
+    message: "Test route for approval",
+    testData: {
+      eventId,
+      suggestedBody: {
+        approvalStatus: action,
+        reason: "Test approval reason"
+      },
+      curlExample: `curl -X PUT ${req.protocol}://${req.get('host')}/events/approve/${eventId} \\
+  -H "Content-Type: application/json" \\
+  -d '{"approvalStatus":"${action}","reason":"Test reason"}'`
+    }
+  });
 });
 
 // API lấy danh sách sự kiện chưa duyệt
