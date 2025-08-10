@@ -82,4 +82,77 @@ async function sendTicketEmail(ticketData) {
   }
 }
 
-module.exports = { sendOtpEmail, sendTicketEmail };
+async function sendGroupInviteEmail(inviteData) {
+  try {
+    // Đọc template HTML
+    const templatePath = path.join(__dirname, '../templates/groupInviteEmail.html');
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    
+    // Compile template với Handlebars
+    const template = handlebars.compile(templateSource);
+    
+    // Helper function để format date
+    handlebars.registerHelper('formatDate', function(timestamp) {
+      if (!timestamp) return '';
+      const date = new Date(timestamp);
+      return date.toLocaleDateString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    });
+    
+    // Chuẩn bị dữ liệu cho template
+    const emailData = {
+      inviterName: inviteData.inviter.username || inviteData.inviter.email,
+      groupName: inviteData.group.groupName,
+      inviteUrl: inviteData.inviteUrl,
+      eventInfo: inviteData.event ? {
+        name: inviteData.event.name,
+        avatar: inviteData.event.avatar,
+        banner: inviteData.event.banner,
+        timeStart: inviteData.event.timeStart,
+        timeEnd: inviteData.event.timeEnd
+      } : null
+    };
+    
+    // Tạo HTML từ template
+    const htmlContent = template(emailData);
+    
+    // Cấu hình email
+    const mailOptions = {
+      from: 'EventSphere <noreply@eventsphere.io.vn>',
+      to: inviteData.email,
+      subject: `🎉 Lời mời tham gia nhóm "${inviteData.group.groupName}" - EventSphere`,
+      html: htmlContent
+    };
+    
+    // Gửi email qua transporter (fallback nếu resend không hoạt động)
+    let result;
+    try {
+      // Thử gửi qua Resend trước
+      result = await resend.emails.send({
+        from: 'EventSphere <noreply@eventsphere.io.vn>',
+        to: inviteData.email,
+        subject: mailOptions.subject,
+        html: htmlContent
+      });
+      console.log('Group invite email sent via Resend:', result.id);
+    } catch (resendError) {
+      console.log('Resend failed, trying transporter:', resendError.message);
+      // Fallback to transporter
+      result = await transporter.sendMail(mailOptions);
+      console.log('Group invite email sent via transporter:', result.messageId);
+    }
+    
+    return { success: true, messageId: result.id || result.messageId };
+    
+  } catch (error) {
+    console.error('Error sending group invite email:', error);
+    throw new Error('Không thể gửi email mời nhóm: ' + error.message);
+  }
+}
+
+module.exports = { sendOtpEmail, sendTicketEmail, sendGroupInviteEmail };

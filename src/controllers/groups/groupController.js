@@ -52,11 +52,15 @@ exports.createGroup = async (req, res) => {
     const group = await Group.create({ eventId, groupName, ownerId, memberIds: [ownerId, ...memberIds] });
     if (memberIds.length && notificationService?.sendGroupInviteNotification) {
       const owner = await userModel.findById(ownerId);
+      // Lấy thông tin event để gửi trong email
+      const eventModel = require('../../models/events/eventModel');
+      const event = await eventModel.findById(eventId).select('name avatar banner timeStart timeEnd').lean();
+      
       for (const memberId of memberIds) {
         if (memberId.toString() === ownerId.toString()) continue;
         const user = await userModel.findById(memberId);
         if (user) {
-          await notificationService.sendGroupInviteNotification(user, group, owner);
+          await notificationService.sendGroupInviteNotification(user, group, owner, event);
         }
       }
     }
@@ -83,7 +87,15 @@ exports.inviteMember = async (req, res) => {
     const user = await userModel.findOne({ email });
     if (user && notificationService?.sendGroupInviteNotification) {
       const owner = await userModel.findById(group.ownerId);
-      await notificationService.sendGroupInviteNotification(user, group, owner);
+      // Truyền thêm thông tin event để gửi trong email
+      const eventInfo = group.eventId ? {
+        name: group.eventId.name,
+        avatar: group.eventId.avatar,
+        banner: group.eventId.banner,
+        timeStart: group.eventId.timeStart,
+        timeEnd: group.eventId.timeEnd
+      } : null;
+      await notificationService.sendGroupInviteNotification(user, group, owner, eventInfo);
     }
     // Lấy thông tin sự kiện trả về
     const eventInfo = group.eventId ? {

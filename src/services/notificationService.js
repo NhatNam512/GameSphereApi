@@ -1,5 +1,6 @@
 const { sendUserNotification } = require("../controllers/auth/sendNotification");
 const inviteFriendModel = require("../models/user/inviteFriendModel");
+const { sendGroupInviteEmail } = require("./mailService");
 
 class NotificationService {
     async sendFriendRequestNotification(receiver, data = {}) {
@@ -66,22 +67,54 @@ class NotificationService {
         );
     }
 
-    async sendGroupInviteNotification(receiver, group, inviter) {
+    async sendGroupInviteNotification(receiver, group, inviter, event = null) {
+        // Gửi push notification nếu có FCM token
         const token = receiver?.fcmTokens;
-        if (!token) return;
-        return sendUserNotification(
-            token,
-            "Lời mời tham gia nhóm",
-            `${inviter?.username || 'Một người dùng'} đã mời bạn vào nhóm "${group.groupName}"`,
-            {
-                groupId: group._id,
-                groupName: group.groupName,
-                eventId: group.eventId,
-                inviterId: inviter?._id,
-                inviterName: inviter?.username
-            },
-            "group"
-        );
+        if (token) {
+            await sendUserNotification(
+                token,
+                "Lời mời tham gia nhóm",
+                `${inviter?.username || 'Một người dùng'} đã mời bạn vào nhóm "${group.groupName}"`,
+                {
+                    groupId: group._id,
+                    groupName: group.groupName,
+                    eventId: group.eventId,
+                    inviterId: inviter?._id,
+                    inviterName: inviter?.username
+                },
+                "group"
+            );
+        }
+
+        // Gửi email invite với custom URL
+        try {
+            const inviteUrl = "https://abr.ge/@eventsphere/invite?route=invite&sub_id=invite&og_tag_id=205617036&routing_short_id=f32zsz&tracking_template_id=21687cf7c4cfd6219ee9e5311acf807c&ad_type=click";
+            
+            await sendGroupInviteEmail({
+                email: receiver.email,
+                inviter: {
+                    username: inviter?.username,
+                    email: inviter?.email
+                },
+                group: {
+                    groupName: group.groupName,
+                    _id: group._id
+                },
+                event: event ? {
+                    name: event.name,
+                    avatar: event.avatar,
+                    banner: event.banner,
+                    timeStart: event.timeStart,
+                    timeEnd: event.timeEnd
+                } : null,
+                inviteUrl: inviteUrl
+            });
+            
+            console.log(`✅ Group invite email sent to ${receiver.email} for group "${group.groupName}"`);
+        } catch (emailError) {
+            console.error('❌ Failed to send group invite email:', emailError.message);
+            // Không throw error để không làm gián đoạn flow chính
+        }
     }
 
     async sendGroupAcceptNotification(owner, user, group) {
