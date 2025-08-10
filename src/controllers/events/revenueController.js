@@ -119,7 +119,26 @@ exports.getEstimatedRevenue = async (req, res) => {
 
     if (event.typeBase === 'none') {
       console.log(showtimes);
-      estimatedRevenue = showtimes[0].price*showtimeCount
+      if (showtimes.length > 0 && showtimes[0].ticketPrice) {
+        estimatedRevenue = showtimes[0].ticketPrice * (showtimes[0].ticketQuantity || 1) * showtimeCount;
+        detail = [{
+          name: 'Standard Ticket',
+          price: showtimes[0].ticketPrice,
+          ticketQuantity: showtimes[0].ticketQuantity || 1,
+          showtimeCount: showtimeCount,
+          revenue: showtimes[0].ticketPrice * (showtimes[0].ticketQuantity || 1) * showtimeCount
+        }];
+      } else {
+        estimatedRevenue = 0;
+        detail = [{
+          name: 'Standard Ticket',
+          price: 0,
+          ticketQuantity: 0,
+          showtimeCount: showtimeCount,
+          revenue: 0,
+          note: 'No price or ticket quantity set for showtimes'
+        }];
+      }
     }
     else if (event.typeBase === 'zone') {
       // 3. Lấy tất cả zoneTicket của event
