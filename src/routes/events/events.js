@@ -990,7 +990,6 @@ router.get('/pending-approval', async function (req, res) {
     const pendingEvents = await eventModel.find({ approvalStatus: 'pending' })
       .populate("userId", "username email picUrl")
       .populate("tags", "name slug")
-      .populate("categories", "name")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))

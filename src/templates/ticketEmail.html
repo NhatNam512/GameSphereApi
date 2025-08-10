@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thông tin vé sự kiện</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px 20px;
+        }
+        
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        
+        .order-info {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .order-info h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .info-value {
+            color: #212529;
+            text-align: right;
+        }
+        
+        .event-details {
+            background-color: #fff;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        
+        .event-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .event-info {
+            display: grid;
+            gap: 12px;
+        }
+        
+        .tickets-section {
+            margin: 30px 0;
+        }
+        
+        .tickets-section h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 22px;
+            text-align: center;
+        }
+        
+        .ticket-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .ticket-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            transform: translate(30px, -30px);
+        }
+        
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .ticket-id {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .ticket-status {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        
+        .ticket-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .ticket-detail {
+            text-align: center;
+        }
+        
+        .ticket-detail-label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .ticket-detail-value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .qr-code {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+        }
+        
+        .qr-code img {
+            max-width: 150px;
+            height: auto;
+        }
+        
+        .qr-code p {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .important-notes {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        
+        .important-notes h4 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        .important-notes ul {
+            color: #856404;
+            padding-left: 20px;
+        }
+        
+        .important-notes li {
+            margin-bottom: 8px;
+        }
+        
+        .footer {
+            background-color: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 30px 20px;
+        }
+        
+        .footer h4 {
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .footer p {
+            margin-bottom: 10px;
+            opacity: 0.8;
+        }
+        
+        .social-links {
+            margin: 20px 0;
+        }
+        
+        .social-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 16px;
+        }
+        
+        .divider {
+            height: 2px;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            margin: 20px 0;
+        }
+        
+        @media (max-width: 600px) {
+            .email-container {
+                margin: 0;
+                box-shadow: none;
+            }
+            
+            .content {
+                padding: 20px 15px;
+            }
+            
+            .ticket-details {
+                grid-template-columns: 1fr;
+            }
+            
+            .info-row {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .info-value {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎫 EventSphere</h1>
+            <p>Vé của bạn đã được xác nhận thành công!</p>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <div class="greeting">
+                Xin chào <strong>{{userName}}</strong>,
+            </div>
+            
+            <p>Cảm ơn bạn đã đặt vé tại EventSphere! Đơn hàng của bạn đã được xác nhận và vé điện tử đã sẵn sàng.</p>
+
+            <!-- Order Information -->
+            <div class="order-info">
+                <h3>📋 Thông tin đơn hàng</h3>
+                <div class="info-row">
+                    <span class="info-label">Mã đơn hàng:</span>
+                    <span class="info-value"><strong>{{orderId}}</strong></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Ngày đặt:</span>
+                    <span class="info-value">{{orderDate}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Số lượng vé:</span>
+                    <span class="info-value">{{ticketCount}} vé</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Tổng tiền:</span>
+                    <span class="info-value"><strong>{{totalPrice}} VNĐ</strong></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Trạng thái:</span>
+                    <span class="info-value" style="color: #28a745;"><strong>✅ Đã thanh toán</strong></span>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Event Details -->
+            <div class="event-details">
+                <div class="event-title">🎭 {{eventName}}</div>
+                <div class="event-info">
+                    <div class="info-row">
+                        <span class="info-label">📅 Ngày diễn ra:</span>
+                        <span class="info-value">{{eventDate}}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">⏰ Thời gian:</span>
+                        <span class="info-value">{{showtime}}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">📍 Địa điểm:</span>
+                        <span class="info-value">{{eventLocation}}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">🏷️ Loại vé:</span>
+                        <span class="info-value">{{bookingType}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tickets Section -->
+            <div class="tickets-section">
+                <h3>🎫 Vé điện tử của bạn</h3>
+                
+                {{#each tickets}}
+                <div class="ticket-card">
+                    <div class="ticket-header">
+                        <div class="ticket-id">Vé #{{ticketId}}</div>
+                        <div class="ticket-status">{{status}}</div>
+                    </div>
+                    
+                    <div class="ticket-details">
+                        {{#if seat}}
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">Ghế</div>
+                            <div class="ticket-detail-value">{{seat.seatId}}</div>
+                        </div>
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">Khu vực</div>
+                            <div class="ticket-detail-value">{{seat.zoneId}}</div>
+                        </div>
+                        {{/if}}
+                        
+                        {{#if zone}}
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">Khu vực</div>
+                            <div class="ticket-detail-value">{{zone.zoneName}}</div>
+                        </div>
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">Loại vé</div>
+                            <div class="ticket-detail-value">Zone Ticket</div>
+                        </div>
+                        {{/if}}
+                        
+                        {{#unless seat}}{{#unless zone}}
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">Loại vé</div>
+                            <div class="ticket-detail-value">Vé thường</div>
+                        </div>
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">Số thứ tự</div>
+                            <div class="ticket-detail-value">#{{ticketNumber}}</div>
+                        </div>
+                        {{/unless}}{{/unless}}
+                    </div>
+                    
+                    <div class="qr-code">
+                        <img src="{{qrCode}}" alt="QR Code vé {{ticketId}}">
+                        <p>Quét mã QR này tại cổng vào</p>
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+
+            <!-- Important Notes -->
+            <div class="important-notes">
+                <h4>⚠️ Lưu ý quan trọng</h4>
+                <ul>
+                    <li>Vui lòng mang theo vé điện tử này (hoặc in ra) khi tham dự sự kiện</li>
+                    <li>Mỗi mã QR chỉ có thể sử dụng một lần duy nhất</li>
+                    <li>Vui lòng có mặt tại địa điểm trước giờ bắt đầu ít nhất 30 phút</li>
+                    <li>Không được chuyển nhượng vé cho người khác</li>
+                    <li>Liên hệ hotline nếu gặp vấn đề: <strong>1900-xxxx</strong></li>
+                </ul>
+            </div>
+
+            <div class="divider"></div>
+
+            <p style="text-align: center; margin: 30px 0; font-size: 16px; color: #666;">
+                Chúc bạn có những trải nghiệm tuyệt vời tại sự kiện! 🎉
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <h4>EventSphere</h4>
+            <p>Nền tảng đặt vé sự kiện hàng đầu Việt Nam</p>
+            <p>📧 Email: support@eventsphere.com</p>
+            <p>📞 Hotline: 1900-xxxx</p>
+            
+            <div class="social-links">
+                <a href="#">Facebook</a>
+                <a href="#">Instagram</a>
+                <a href="#">Twitter</a>
+            </div>
+            
+            <p style="font-size: 12px; margin-top: 20px; opacity: 0.7;">
+                © 2024 EventSphere. Tất cả quyền được bảo lưu.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

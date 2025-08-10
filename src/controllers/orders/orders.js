@@ -13,6 +13,7 @@ const userModel = require("../../models/userModel");
 const ZoneTicket = require("../../models/events/zoneTicketModel");
 const { sendNotificationCore } = require("../auth/sendNotification");
 const showtimeModel = require("../../models/events/showtimeModel");
+const { sendTicketEmail } = require('../../services/mailService');
 
 exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -297,6 +298,25 @@ exports.createTicket = async (req, res) => {
         // Xóa cache Redis chi tiết sự kiện
         await redisClient.del(`events_detail_${order.eventId}`);
         await session.commitTransaction();
+        
+        // Gửi email vé cho người dùng (không cần chờ để không ảnh hưởng response time)
+        setTimeout(async () => {
+            try {
+                const ticketEmailData = {
+                    user,
+                    order,
+                    event,
+                    showtime,
+                    tickets: createdTickets
+                };
+                await sendTicketEmail(ticketEmailData);
+                console.log(`Email vé đã được gửi cho user ${user.email}`);
+            } catch (emailError) {
+                console.error('Lỗi gửi email vé:', emailError.message);
+                // Không throw error để không ảnh hưởng đến response chính
+            }
+        }, 1000); // Delay 1 giây để đảm bảo transaction đã commit
+        
         return res.status(200).json({ success: true, data: createdTickets });
     } catch (e) {
         await session.abortTransaction();
