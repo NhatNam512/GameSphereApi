@@ -85,6 +85,13 @@ exports.inviteMember = async (req, res) => {
     group.inviteEmails.push(inviteObj);
     await group.save();
     const user = await userModel.findOne({ email });
+    console.log('🔍 Debug email sending:');
+    console.log('- Email to invite:', email);
+    console.log('- User found:', !!user);
+    console.log('- User email:', user?.email);
+    console.log('- NotificationService exists:', !!notificationService);
+    console.log('- sendGroupInviteNotification exists:', !!notificationService?.sendGroupInviteNotification);
+    
     if (user && notificationService?.sendGroupInviteNotification) {
       const owner = await userModel.findById(group.ownerId);
       // Truyền thêm thông tin event để gửi trong email
@@ -95,7 +102,11 @@ exports.inviteMember = async (req, res) => {
         timeStart: group.eventId.timeStart,
         timeEnd: group.eventId.timeEnd
       } : null;
+      console.log('📧 Attempting to send email...');
       await notificationService.sendGroupInviteNotification(user, group, owner, eventInfo);
+      console.log('✅ Email sent successfully');
+    } else {
+      console.log('❌ Email not sent - conditions not met');
     }
     // Lấy thông tin sự kiện trả về
     const eventInfo = group.eventId ? {

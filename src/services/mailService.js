@@ -56,17 +56,25 @@ async function sendTicketEmail(ticketData) {
         qrCode: ticket.qrCode,
         seat: ticket.seat,
         zone: ticket.zone
-      }))
+      })),
+      // Gift fields
+      isGift: ticketData.isGift || false,
+      giverName: ticketData.giver ? (ticketData.giver.fullName || ticketData.giver.email) : null,
+      giftMessage: ticketData.giftMessage || null
     };
     
     // Tạo HTML từ template
     const htmlContent = template(emailData);
     
     // Cấu hình email
+    const subject = emailData.isGift 
+      ? `🎁 Bạn nhận được vé quà tặng cho sự kiện "${ticketData.event.name}"`
+      : `🎫 Vé sự kiện "${ticketData.event.name}" - Đặt vé thành công`;
+      
     const mailOptions = {
       from: 'EventSphere <nhatnam5122004@gmail.com>',
       to: ticketData.user.email,
-      subject: `🎫 Vé sự kiện "${ticketData.event.name}" - Đặt vé thành công`,
+      subject: subject,
       html: htmlContent,
       attachments: []
     };
@@ -129,25 +137,12 @@ async function sendGroupInviteEmail(inviteData) {
       html: htmlContent
     };
     
-    // Gửi email qua transporter (fallback nếu resend không hoạt động)
-    let result;
-    try {
-      // Thử gửi qua Resend trước
-      result = await resend.emails.send({
-        from: 'EventSphere <noreply@eventsphere.io.vn>',
-        to: inviteData.email,
-        subject: mailOptions.subject,
-        html: htmlContent
-      });
-      console.log('Group invite email sent via Resend:', result.id);
-    } catch (resendError) {
-      console.log('Resend failed, trying transporter:', resendError.message);
-      // Fallback to transporter
-      result = await transporter.sendMail(mailOptions);
-      console.log('Group invite email sent via transporter:', result.messageId);
-    }
+    // Gửi email qua transporter (giống như vé email)
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Group invite email sent via transporter:', result.messageId);
+    console.log('📧 Email details - To:', inviteData.email, 'Subject:', mailOptions.subject);
     
-    return { success: true, messageId: result.id || result.messageId };
+    return { success: true, messageId: result.messageId };
     
   } catch (error) {
     console.error('Error sending group invite email:', error);

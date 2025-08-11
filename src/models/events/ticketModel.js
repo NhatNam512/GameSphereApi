@@ -22,5 +22,9 @@ const ticket = new schema({
     createdAt: { type: Date, default: Date.now }, 
     status: { type: String, enum: ["issued", "used"], default: "issued" },
     issuedAt: { type: Date, default: Date.now },
+    // Gift fields
+    recipientUserId: { type: oid, ref: "users" },
+    isGift: { type: Boolean, default: false },
+    giftMessage: { type: String, maxlength: 500 },
 });
 module.exports = mongoose.model.ticket || mongoose.model("tickets", ticket);

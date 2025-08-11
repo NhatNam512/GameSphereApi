@@ -19,7 +19,7 @@ exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const { userId, eventId, showtimeId, bookingIds, bookingType, totalPrice } = req.body;
+        const { userId, eventId, showtimeId, bookingIds, bookingType, totalPrice, giftRecipientUserId, giftMessage } = req.body;
 
         // Validate bookingType
         const validTypes = ['none', 'seat', 'zone'];
@@ -30,6 +30,34 @@ exports.createOrder = async (req, res) => {
         // Validate chung
         if (!userId || !eventId || !showtimeId || !totalPrice || totalPrice < 0) {
             return res.status(400).json({ success: false, message: "Thiếu thông tin hoặc dữ liệu không hợp lệ." });
+        }
+
+        // Validate gift fields
+        if (giftRecipientUserId) {
+            // Kiểm tra user nhận quà có tồn tại không
+            const recipientUser = await userModel.findById(giftRecipientUserId);
+            if (!recipientUser) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Không tìm thấy người dùng nhận quà." 
+                });
+            }
+            
+            // Không cho phép tặng cho chính mình
+            if (giftRecipientUserId === userId) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Không thể tặng vé cho chính mình." 
+                });
+            }
+
+            // Validate gift message length
+            if (giftMessage && giftMessage.length > 500) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Lời nhắn quà tặng không được vượt quá 500 ký tự." 
+                });
+            }
         }
 
         // Validate bookingIds và totalAmount dựa trên bookingType
@@ -101,7 +129,13 @@ exports.createOrder = async (req, res) => {
             status: "pending",
             bookingType,
             totalPrice,
-            bookingIds: bookingType === 'none' ? [] : bookingIds
+            bookingIds: bookingType === 'none' ? [] : bookingIds,
+            // Gift fields
+            ...(giftRecipientUserId && {
+                isGift: true,
+                giftRecipientUserId,
+                giftMessage: giftMessage || null
+            })
         };
         const createdOrder = await orderModel.create([newOrder], { session });
         // Gán orderId cho từng booking và chuyển trạng thái sang 'booked' (chỉ khi có booking)
@@ -181,9 +215,10 @@ exports.createTicket = async (req, res) => {
                 const ticketNumber = await generateTicketNumber();
                 const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
                 const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                ticketsToInsert.push({
+                
+                const ticketData = {
                     orderId: order._id,
-                    userId: order.userId,
+                    userId: order.isGift ? order.giftRecipientUserId : order.userId, // VÉ THUỘC VỀ NGƯỜI NHẬN NẾU LÀ QUÀ
                     eventId: order.eventId,
                     showtimeId: order.showtimeId,
                     amount: 1,
@@ -194,7 +229,16 @@ exports.createTicket = async (req, res) => {
                     ticketNumber,
                     qrCode
                     // Không có seat hoặc zone cho bookingType 'none'
-                });
+                };
+
+                // Thêm gift fields nếu là quà tặng
+                if (order.isGift) {
+                    ticketData.recipientUserId = order.giftRecipientUserId;
+                    ticketData.isGift = true;
+                    ticketData.giftMessage = order.giftMessage;
+                }
+
+                ticketsToInsert.push(ticketData);
                 totalTickets++;
             }
         } else {
@@ -207,9 +251,10 @@ exports.createTicket = async (req, res) => {
                         const ticketNumber = await generateTicketNumber();
                         const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
                         const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                        ticketsToInsert.push({
+                        
+                        const ticketData = {
                             orderId: order._id,
-                            userId: order.userId,
+                            userId: order.isGift ? order.giftRecipientUserId : order.userId, // VÉ THUỘC VỀ NGƯỜI NHẬN NẾU LÀ QUÀ
                             eventId: order.eventId,
                             showtimeId: order.showtimeId,
                             amount: 1,
@@ -220,7 +265,16 @@ exports.createTicket = async (req, res) => {
                             ticketNumber,
                             qrCode,
                             seat: { seatId: seat.seatId, zoneId: seat.zoneId }
-                        });
+                        };
+
+                        // Thêm gift fields nếu là quà tặng
+                        if (order.isGift) {
+                            ticketData.recipientUserId = order.giftRecipientUserId;
+                            ticketData.isGift = true;
+                            ticketData.giftMessage = order.giftMessage;
+                        }
+
+                        ticketsToInsert.push(ticketData);
                         totalTickets++;
                     }
                     // Cập nhật trạng thái giữ chỗ ghế thành 'booked' (nếu cần)
@@ -245,9 +299,10 @@ exports.createTicket = async (req, res) => {
                         const ticketNumber = await generateTicketNumber();
                         const ticketId = `${event._id.toString().slice(-4)}-TCK${String(ticketNumber).padStart(6, '0')}`;
                         const qrCode = await QRCode.toDataURL(`TicketID:${ticketId}`);
-                        ticketsToInsert.push({
+                        
+                        const ticketData = {
                             orderId: order._id,
-                            userId: order.userId,
+                            userId: order.isGift ? order.giftRecipientUserId : order.userId, // VÉ THUỘC VỀ NGƯỜI NHẬN NẾU LÀ QUÀ
                             eventId: order.eventId,
                             showtimeId: order.showtimeId,
                             amount: 1,
@@ -258,7 +313,16 @@ exports.createTicket = async (req, res) => {
                             ticketNumber,
                             qrCode,
                             zone: { zoneId: zone._id, zoneName: zone.name }
-                        });
+                        };
+
+                        // Thêm gift fields nếu là quà tặng
+                        if (order.isGift) {
+                            ticketData.recipientUserId = order.giftRecipientUserId;
+                            ticketData.isGift = true;
+                            ticketData.giftMessage = order.giftMessage;
+                        }
+
+                        ticketsToInsert.push(ticketData);
                         totalTickets++;
                     }
                     // Cập nhật trạng thái giữ vé khu vực thành 'booked' (nếu cần)
@@ -299,18 +363,41 @@ exports.createTicket = async (req, res) => {
         await redisClient.del(`events_detail_${order.eventId}`);
         await session.commitTransaction();
         
-        // Gửi email vé cho người dùng (không cần chờ để không ảnh hưởng response time)
+        // Gửi email vé (không cần chờ để không ảnh hưởng response time)
         setTimeout(async () => {
             try {
-                const ticketEmailData = {
-                    user,
-                    order,
-                    event,
-                    showtime,
-                    tickets: createdTickets
-                };
-                await sendTicketEmail(ticketEmailData);
-                console.log(`Email vé đã được gửi cho user ${user.email}`);
+                if (order.isGift) {
+                    // Lấy thông tin người nhận quà
+                    const recipientUser = await userModel.findById(order.giftRecipientUserId);
+                    
+                    // Gửi email vé cho người nhận quà
+                    const giftTicketEmailData = {
+                        user: recipientUser, // Người nhận
+                        giver: user, // Người tặng
+                        order,
+                        event,
+                        showtime,
+                        tickets: createdTickets,
+                        isGift: true,
+                        giftMessage: order.giftMessage
+                    };
+                    await sendTicketEmail(giftTicketEmailData);
+                    console.log(`Email vé quà tặng đã được gửi cho ${recipientUser.email}`);
+                    
+                    // TODO: Gửi email xác nhận cho người tặng (implement later)
+                    console.log(`Cần gửi email xác nhận tặng quà cho ${user.email}`);
+                } else {
+                    // Gửi email vé bình thường
+                    const ticketEmailData = {
+                        user,
+                        order,
+                        event,
+                        showtime,
+                        tickets: createdTickets
+                    };
+                    await sendTicketEmail(ticketEmailData);
+                    console.log(`Email vé đã được gửi cho user ${user.email}`);
+                }
             } catch (emailError) {
                 console.error('Lỗi gửi email vé:', emailError.message);
                 // Không throw error để không ảnh hưởng đến response chính

@@ -301,7 +301,23 @@
                 Xin chào <strong>{{userName}}</strong>,
             </div>
             
+            {{#if isGift}}
+            <!-- Gift message section -->
+            <div class="gift-section" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center;">
+                <h3 style="color: #fff; margin-bottom: 15px; font-size: 24px;">🎁 Bạn nhận được một món quà!</h3>
+                <p style="color: #fff; font-size: 16px; margin-bottom: 10px;">
+                    <strong>{{giverName}}</strong> đã tặng bạn vé cho sự kiện này
+                </p>
+                {{#if giftMessage}}
+                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin-top: 15px;">
+                    <p style="color: #fff; font-style: italic; font-size: 16px;">"{{giftMessage}}"</p>
+                </div>
+                {{/if}}
+            </div>
+            <p>Vé điện tử của bạn đã sẵn sàng sử dụng!</p>
+            {{else}}
             <p>Cảm ơn bạn đã đặt vé tại EventSphere! Đơn hàng của bạn đã được xác nhận và vé điện tử đã sẵn sàng.</p>
+            {{/if}}
 
             <!-- Order Information -->
             <div class="order-info">

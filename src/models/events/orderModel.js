@@ -22,7 +22,11 @@ const order = new schema({
         }
     },
     paidAt: { type: Date },
-    updatedAt: { type: Date, default: Date.now }
+    updatedAt: { type: Date, default: Date.now },
+    // Gift fields
+    giftRecipientUserId: { type: oid, ref: "users" },
+    isGift: { type: Boolean, default: false },
+    giftMessage: { type: String, maxlength: 500 }
 });
 
 // Tự động cập nhật updatedAt khi có thay đổi

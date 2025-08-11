@@ -370,6 +370,53 @@ router.get("/getUser/:id", async function (req, res) {
 
 router.post('/cancelAllReservedSeats', authenticate, cancelAllReservedSeats);
 
+// API search user để tìm người nhận quà tặng
+router.get('/search', authenticate, async function (req, res) {
+  try {
+    const { query } = req.query;
+    const currentUserId = req.user.id;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Từ khóa tìm kiếm phải có ít nhất 2 ký tự" 
+      });
+    }
+
+    // Tìm kiếm user theo email hoặc username (không phân biệt hoa thường)
+    const searchRegex = new RegExp(query.trim(), 'i');
+    const users = await userModel.find({
+      _id: { $ne: currentUserId }, // Loại trừ user hiện tại
+      $or: [
+        { email: searchRegex },
+        { username: searchRegex }
+      ]
+    })
+    .select('_id email username fullName picUrl') // Chỉ lấy các field cần thiết
+    .limit(10); // Giới hạn 10 kết quả
+
+    const results = users.map(user => ({
+      userId: user._id,
+      email: user.email,
+      username: user.username,
+      fullName: user.fullName || user.username,
+      avatar: user.picUrl
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Tìm kiếm người dùng thành công",
+      data: results
+    });
+
+  } catch (error) {
+    console.error('Lỗi search user:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Lỗi hệ thống khi tìm kiếm người dùng" 
+    });
+  }
+});
 
 module.exports = router;
 
