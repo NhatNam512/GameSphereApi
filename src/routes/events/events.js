@@ -153,6 +153,7 @@ router.get("/home", async function (req, res) {
     })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
       .populate("userId", "username picUrl")
+      .populate("tags", "name")
       .lean();
     console.timeEnd("🗃️ DB Query");
 
@@ -205,24 +206,17 @@ router.get("/home", async function (req, res) {
       const showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
       ev.showtimes = showtimes;
       
-      // Lấy tên các tag (trả về mảng tên thay vì mảng id)
-      let tagNames = [];
+      // Lấy tên các tag từ populated data
       if (ev.tags && ev.tags.length > 0) {
-        // Filter out invalid ObjectIds and keep valid ones
-        const validTagIds = ev.tags.filter(tagId => 
-          typeof tagId === 'string' && mongoose.Types.ObjectId.isValid(tagId)
-        );
-        
-        if (validTagIds.length > 0) {
-          const tags = await tagModel.find({ _id: { $in: validTagIds } });
-          tagNames = tags.map(tag => tag.name);
-        }
-        
-        // If some tags are already strings (tag names), keep them
-        const stringTags = ev.tags.filter(tag => typeof tag === 'string' && !mongoose.Types.ObjectId.isValid(tag));
-        tagNames = [...tagNames, ...stringTags];
+        ev.tags = ev.tags.map(tag => {
+          if (typeof tag === 'object' && tag.name) {
+            return tag.name;
+          }
+          return tag;
+        }).filter(tag => tag); // Remove any null/undefined values
+      } else {
+        ev.tags = [];
       }
-      ev.tags = tagNames;
       
       return ev;
     }));
