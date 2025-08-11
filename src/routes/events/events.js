@@ -204,6 +204,26 @@ router.get("/home", async function (req, res) {
       // Thêm showtimes cho từng event (giống detail)
       const showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
       ev.showtimes = showtimes;
+      
+      // Lấy tên các tag (trả về mảng tên thay vì mảng id)
+      let tagNames = [];
+      if (ev.tags && ev.tags.length > 0) {
+        // Filter out invalid ObjectIds and keep valid ones
+        const validTagIds = ev.tags.filter(tagId => 
+          typeof tagId === 'string' && mongoose.Types.ObjectId.isValid(tagId)
+        );
+        
+        if (validTagIds.length > 0) {
+          const tags = await tagModel.find({ _id: { $in: validTagIds } });
+          tagNames = tags.map(tag => tag.name);
+        }
+        
+        // If some tags are already strings (tag names), keep them
+        const stringTags = ev.tags.filter(tag => typeof tag === 'string' && !mongoose.Types.ObjectId.isValid(tag));
+        tagNames = [...tagNames, ...stringTags];
+      }
+      ev.tags = tagNames;
+      
       return ev;
     }));
 
@@ -349,8 +369,19 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
     // Lấy tên các tag (trả về mảng tên thay vì mảng id)
     let tagNames = [];
     if (detail.tags && detail.tags.length > 0) {
-      const tags = await tagModel.find({ _id: { $in: detail.tags } });
-      tagNames = tags.map(tag => tag.name);
+      // Filter out invalid ObjectIds and keep valid ones
+      const validTagIds = detail.tags.filter(tagId => 
+        typeof tagId === 'string' && mongoose.Types.ObjectId.isValid(tagId)
+      );
+      
+      if (validTagIds.length > 0) {
+        const tags = await tagModel.find({ _id: { $in: validTagIds } });
+        tagNames = tags.map(tag => tag.name);
+      }
+      
+      // If some tags are already strings (tag names), keep them
+      const stringTags = detail.tags.filter(tag => typeof tag === 'string' && !mongoose.Types.ObjectId.isValid(tag));
+      tagNames = [...tagNames, ...stringTags];
     }
 
     // Kiểm tra user đã review event này chưa
