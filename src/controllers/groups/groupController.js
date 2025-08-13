@@ -45,11 +45,32 @@ const autoDisableSharing = async (groupId, userId) => {
 
 exports.createGroup = async (req, res) => {
   try {
-    const { eventId, groupName, ownerId, memberIds = [] } = req.body;
+    const { eventId, showtimeId, groupName, ownerId, memberIds = [] } = req.body;
     if (!eventId || !groupName || !ownerId) {
       return res.status(400).json({ message: 'Thiếu thông tin tạo group.' });
     }
-    const group = await Group.create({ eventId, groupName, ownerId, memberIds: [ownerId, ...memberIds] });
+    
+    // Kiểm tra showtimeId có hợp lệ không (nếu có)
+    if (showtimeId) {
+      const Showtime = require('../../models/events/showtimeModel');
+      const showtime = await Showtime.findById(showtimeId);
+      if (!showtime) {
+        return res.status(400).json({ message: 'Showtime không tồn tại.' });
+      }
+      // Kiểm tra showtime có thuộc về event này không
+      if (showtime.eventId.toString() !== eventId) {
+        return res.status(400).json({ message: 'Showtime không thuộc về sự kiện này.' });
+      }
+    }
+    
+    const group = await Group.create({ 
+      eventId, 
+      showtimeId, 
+      groupName, 
+      ownerId, 
+      memberIds: [ownerId, ...memberIds] 
+    });
+    
     if (memberIds.length && notificationService?.sendGroupInviteNotification) {
       const owner = await userModel.findById(ownerId);
       // Lấy thông tin event để gửi trong email
@@ -64,7 +85,13 @@ exports.createGroup = async (req, res) => {
         }
       }
     }
-    res.status(201).json(group.toObject());
+    
+    // Populate thông tin showtime trước khi trả về
+    const populatedGroup = await Group.findById(group._id)
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .lean();
+    
+    res.status(201).json(populatedGroup);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -75,15 +102,21 @@ exports.inviteMember = async (req, res) => {
     const { groupId } = req.params;
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: 'Thiếu email.' });
-    // Populate eventId để lấy thông tin sự kiện
-    const group = await Group.findById(groupId).populate('eventId', 'name avatar banner timeStart timeEnd');
+    
+    // Populate eventId và showtimeId để lấy thông tin sự kiện và showtime
+    const group = await Group.findById(groupId)
+      .populate('eventId', 'name avatar banner timeStart timeEnd')
+      .populate('showtimeId', '_id startTime endTime ticketPrice');
+      
     if (!group) return res.status(404).json({ message: 'Không tìm thấy group.' });
     if (group.inviteEmails.some(inv => inv.email === email)) {
       return res.status(400).json({ message: 'Email đã được mời.' });
     }
+    
     const inviteObj = { email, invitedBy: req.user?._id };
     group.inviteEmails.push(inviteObj);
     await group.save();
+    
     const user = await userModel.findOne({ email });
     console.log('🔍 Debug email sending:');
     console.log('- Email to invite:', email);
@@ -94,7 +127,7 @@ exports.inviteMember = async (req, res) => {
     
     if (user && notificationService?.sendGroupInviteNotification) {
       const owner = await userModel.findById(group.ownerId);
-      // Truyền thêm thông tin event để gửi trong email
+      // Truyền thêm thông tin event và showtime để gửi trong email
       const eventInfo = group.eventId ? {
         name: group.eventId.name,
         avatar: group.eventId.avatar,
@@ -102,13 +135,22 @@ exports.inviteMember = async (req, res) => {
         timeStart: group.eventId.timeStart,
         timeEnd: group.eventId.timeEnd
       } : null;
+      
+      const showtimeInfo = group.showtimeId ? {
+        id: group.showtimeId._id,
+        startTime: group.showtimeId.startTime,
+        endTime: group.showtimeId.endTime,
+        ticketPrice: group.showtimeId.ticketPrice
+      } : null;
+      
       console.log('📧 Attempting to send email...');
-      await notificationService.sendGroupInviteNotification(user, group, owner, eventInfo);
+      await notificationService.sendGroupInviteNotification(user, group, owner, eventInfo, showtimeInfo);
       console.log('✅ Email sent successfully');
     } else {
       console.log('❌ Email not sent - conditions not met');
     }
-    // Lấy thông tin sự kiện trả về
+    
+    // Lấy thông tin sự kiện và showtime trả về
     const eventInfo = group.eventId ? {
       id: group.eventId._id,
       name: group.eventId.name,
@@ -117,7 +159,20 @@ exports.inviteMember = async (req, res) => {
       timeStart: group.eventId.timeStart,
       timeEnd: group.eventId.timeEnd
     } : null;
-    res.json({ success: true, invite: { ...inviteObj, status: 'pending' }, event: eventInfo });
+    
+    const showtimeInfo = group.showtimeId ? {
+      id: group.showtimeId._id,
+      startTime: group.showtimeId.startTime,
+      endTime: group.showtimeId.endTime,
+      ticketPrice: group.showtimeId.ticketPrice
+    } : null;
+    
+    res.json({ 
+      success: true, 
+      invite: { ...inviteObj, status: 'pending' }, 
+      event: eventInfo,
+      showtime: showtimeInfo
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -217,7 +272,18 @@ exports.deleteGroup = async (req, res) => {
 exports.getGroupsByEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
-    const groups = await Group.find({ eventId });
+    const { showtimeId } = req.query;
+    
+    let filter = { eventId };
+    if (showtimeId) {
+      filter.showtimeId = showtimeId;
+    }
+    
+    const groups = await Group.find(filter)
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .populate('ownerId', '_id username email')
+      .lean();
+    
     res.json(groups);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -229,11 +295,13 @@ exports.getGroupsByUser = async (req, res) => {
     const { userId } = req.params;
     const groups = await Group.find({ memberIds: userId })
       .populate('eventId', 'name avatar banner timeStart timeEnd')
-      .populate('ownerId', 'username email');
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .populate('ownerId', 'username email')
+      .lean();
     
-    // Format lại dữ liệu để trả về thông tin sự kiện
+    // Format lại dữ liệu để trả về thông tin sự kiện và showtime
     const formattedGroups = groups.map(group => {
-      const groupObj = group.toObject();
+      const groupObj = group;
       return {
         ...groupObj,
         event: groupObj.eventId ? {
@@ -243,6 +311,12 @@ exports.getGroupsByUser = async (req, res) => {
           banner: groupObj.eventId.banner,
           timeStart: groupObj.eventId.timeStart,
           timeEnd: groupObj.eventId.timeEnd
+        } : null,
+        showtime: groupObj.showtimeId ? {
+          id: groupObj.showtimeId._id,
+          startTime: groupObj.showtimeId.startTime,
+          endTime: groupObj.showtimeId.endTime,
+          ticketPrice: groupObj.showtimeId.ticketPrice
         } : null,
         owner: groupObj.ownerId ? {
           id: groupObj.ownerId._id,
@@ -372,22 +446,218 @@ exports.searchUserByEmailOrPhone = async (req, res) => {
   }
 };
 
+exports.getShowtimesByEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    const Showtime = require('../../models/events/showtimeModel');
+    const showtimes = await Showtime.find({ eventId })
+      .select('_id startTime endTime ticketPrice ticketQuantity soldTickets')
+      .lean();
+    
+    res.json({
+      success: true,
+      message: 'Lấy danh sách showtime thành công',
+      data: showtimes
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getGroupById = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    
+    const group = await Group.findById(groupId)
+      .populate('eventId', '_id name avatar banner timeStart timeEnd description location')
+      .populate('showtimeId', '_id startTime endTime ticketPrice ticketQuantity soldTickets')
+      .populate('ownerId', '_id username email picUrl')
+      .populate('memberIds', '_id username email picUrl')
+      .lean();
+    
+    if (!group) {
+      return res.status(404).json({ message: 'Không tìm thấy group.' });
+    }
+    
+    // Format lại dữ liệu
+    const formattedGroup = {
+      ...group,
+      event: group.eventId ? {
+        id: group.eventId._id,
+        name: group.eventId.name,
+        avatar: group.eventId.avatar,
+        banner: group.eventId.banner,
+        timeStart: group.eventId.timeStart,
+        timeEnd: group.eventId.timeEnd,
+        description: group.eventId.description,
+        location: group.eventId.location
+      } : null,
+      showtime: group.showtimeId ? {
+        id: group.showtimeId._id,
+        startTime: group.showtimeId.startTime,
+        endTime: group.showtimeId.endTime,
+        ticketPrice: group.showtimeId.ticketPrice,
+        ticketQuantity: group.showtimeId.ticketQuantity,
+        soldTickets: group.showtimeId.soldTickets
+      } : null,
+      owner: group.ownerId ? {
+        id: group.ownerId._id,
+        username: group.ownerId.username,
+        email: group.ownerId.email,
+        picUrl: group.ownerId.picUrl
+      } : null,
+      members: group.memberIds ? group.memberIds.map(member => ({
+        id: member._id,
+        username: member.username,
+        email: member.email,
+        picUrl: member.picUrl
+      })) : []
+    };
+    
+    res.json({
+      success: true,
+      message: 'Lấy thông tin group thành công',
+      data: formattedGroup
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { groupName, showtimeId } = req.body;
+    
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: 'Không tìm thấy group.' });
+    }
+    
+    // Cập nhật thông tin
+    if (groupName) {
+      group.groupName = groupName;
+    }
+    
+    if (showtimeId !== undefined) {
+      // Nếu showtimeId là null, xóa showtime
+      if (showtimeId === null) {
+        group.showtimeId = null;
+      } else {
+        // Kiểm tra showtimeId có hợp lệ không
+        const Showtime = require('../../models/events/showtimeModel');
+        const showtime = await Showtime.findById(showtimeId);
+        if (!showtime) {
+          return res.status(400).json({ message: 'Showtime không tồn tại.' });
+        }
+        // Kiểm tra showtime có thuộc về event này không
+        if (showtime.eventId.toString() !== group.eventId.toString()) {
+          return res.status(400).json({ message: 'Showtime không thuộc về sự kiện này.' });
+        }
+        group.showtimeId = showtimeId;
+      }
+    }
+    
+    await group.save();
+    
+    // Populate và trả về thông tin cập nhật
+    const updatedGroup = await Group.findById(groupId)
+      .populate('eventId', '_id name avatar banner timeStart timeEnd description location')
+      .populate('showtimeId', '_id startTime endTime ticketPrice ticketQuantity soldTickets')
+      .populate('ownerId', '_id username email picUrl')
+      .lean();
+    
+    res.json({
+      success: true,
+      message: 'Cập nhật group thành công',
+      data: updatedGroup
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getGroupsByShowtime = async (req, res) => {
+  try {
+    const { showtimeId } = req.params;
+    
+    const groups = await Group.find({ showtimeId })
+      .populate('eventId', '_id name avatar banner timeStart timeEnd')
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .populate('ownerId', '_id username email picUrl')
+      .populate('memberIds', '_id username email picUrl')
+      .lean();
+    
+    // Format lại dữ liệu
+    const formattedGroups = groups.map(group => ({
+      ...group,
+      event: group.eventId ? {
+        id: group.eventId._id,
+        name: group.eventId.name,
+        avatar: group.eventId.avatar,
+        banner: group.eventId.banner,
+        timeStart: group.eventId.timeStart,
+        timeEnd: group.eventId.timeEnd
+      } : null,
+      showtime: group.showtimeId ? {
+        id: group.showtimeId._id,
+        startTime: group.showtimeId.startTime,
+        endTime: group.showtimeId.endTime,
+        ticketPrice: group.showtimeId.ticketPrice
+      } : null,
+      owner: group.ownerId ? {
+        id: group.ownerId._id,
+        username: group.ownerId.username,
+        email: group.ownerId.email,
+        picUrl: group.ownerId.picUrl
+      } : null,
+      members: group.memberIds ? group.memberIds.map(member => ({
+        id: member._id,
+        username: member.username,
+        email: member.email,
+        picUrl: member.picUrl
+      })) : []
+    }));
+    
+    res.json({
+      success: true,
+      message: 'Lấy danh sách group theo showtime thành công',
+      data: formattedGroups
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 exports.getGroupInvitesForUser = async (req, res) => {
   try {
     const { userId } = req.params;
     const user = await userModel.findById(userId);
     if (!user) return res.status(404).json({ message: 'Không tìm thấy user.' });
+    
     const groups = await Group.find({
       inviteEmails: {
         $elemMatch: { email: user.email, status: 'pending' }
       }
-    }).populate('ownerId', 'username email');
+    })
+    .populate('ownerId', 'username email')
+    .populate('showtimeId', '_id startTime endTime ticketPrice')
+    .lean();
+    
     const result = groups.map(group => {
       const invite = group.inviteEmails.find(inv => inv.email === user.email && inv.status === 'pending');
       return {
         groupId: group._id,
         groupName: group.groupName,
         eventId: group.eventId,
+        showtimeId: group.showtimeId,
+        showtime: group.showtimeId ? {
+          id: group.showtimeId._id,
+          startTime: group.showtimeId.startTime,
+          endTime: group.showtimeId.endTime,
+          ticketPrice: group.showtimeId.ticketPrice
+        } : null,
         invitedBy: invite?.invitedBy,
         owner: group.ownerId,
         invitedAt: invite?.invitedAt,

@@ -10,6 +10,7 @@ const inviteEmailSchema = new Schema({
 
 const groupSchema = new Schema({
   eventId: { type: Schema.Types.ObjectId, ref: 'events', required: true },
+  showtimeId: { type: Schema.Types.ObjectId, ref: 'showtimes' },
   groupName: { type: String, required: true },
   ownerId: { type: Schema.Types.ObjectId, ref: 'users', required: true },
   memberIds: [{ type: Schema.Types.ObjectId, ref: 'users' }],

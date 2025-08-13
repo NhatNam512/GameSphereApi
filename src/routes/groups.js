@@ -3,6 +3,8 @@ const router = express.Router();
 const groupController = require('../controllers/groups/groupController');
 
 router.post('/createGroup', groupController.createGroup);
+router.get('/:groupId', groupController.getGroupById);
+router.put('/:groupId', groupController.updateGroup);
 router.post('/:groupId/invite', groupController.inviteMember);
 router.get('/:groupId/invites', groupController.getInvites);
 router.post('/:groupId/accept', groupController.acceptInvite);
@@ -17,6 +19,8 @@ router.get('/by-event/:eventId', groupController.getGroupsByEvent);
 router.get('/by-user/:userId', groupController.getGroupsByUser);
 router.get('/user/:userId/groups', groupController.getGroupsByUser);
 router.get('/invited/:userId', groupController.getGroupInvitesForUser);
+router.get('/showtimes/:eventId', groupController.getShowtimesByEvent);
+router.get('/by-showtime/:showtimeId', groupController.getGroupsByShowtime);
 router.delete('/delete/:groupId', groupController.deleteGroup);
 
 module.exports = router; 

@@ -323,23 +323,23 @@
             <div class="order-info">
                 <h3>📋 Thông tin đơn hàng</h3>
                 <div class="info-row">
-                    <span class="info-label">Mã đơn hàng:</span>
+                    <span class="info-label">Mã đơn hàng: </span>
                     <span class="info-value"><strong>{{orderId}}</strong></span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Ngày đặt:</span>
+                    <span class="info-label">Ngày đặt: </span>
                     <span class="info-value">{{orderDate}}</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Số lượng vé:</span>
+                    <span class="info-label">Số lượng vé: </span>
                     <span class="info-value">{{ticketCount}} vé</span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Tổng tiền:</span>
+                    <span class="info-label">Tổng tiền: </span>
                     <span class="info-value"><strong>{{totalPrice}} VNĐ</strong></span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Trạng thái:</span>
+                    <span class="info-label">Trạng thái: </span>
                     <span class="info-value" style="color: #28a745;"><strong>✅ Đã thanh toán</strong></span>
                 </div>
             </div>
@@ -351,19 +351,19 @@
                 <div class="event-title">🎭 {{eventName}}</div>
                 <div class="event-info">
                     <div class="info-row">
-                        <span class="info-label">📅 Ngày diễn ra:</span>
+                        <span class="info-label">📅 Ngày diễn ra: </span>
                         <span class="info-value">{{eventDate}}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">⏰ Thời gian:</span>
+                        <span class="info-label">⏰ Thời gian: </span>
                         <span class="info-value">{{showtime}}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">📍 Địa điểm:</span>
+                        <span class="info-label">📍 Địa điểm: </span>
                         <span class="info-value">{{eventLocation}}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">🏷️ Loại vé:</span>
+                        <span class="info-label">🏷️ Loại vé: </span>
                         <span class="info-value">{{bookingType}}</span>
                     </div>
                 </div>
@@ -386,20 +386,12 @@
                             <div class="ticket-detail-label">Ghế</div>
                             <div class="ticket-detail-value">{{seat.seatId}}</div>
                         </div>
-                        <div class="ticket-detail">
-                            <div class="ticket-detail-label">Khu vực</div>
-                            <div class="ticket-detail-value">{{seat.zoneId}}</div>
-                        </div>
                         {{/if}}
                         
                         {{#if zone}}
                         <div class="ticket-detail">
                             <div class="ticket-detail-label">Khu vực</div>
                             <div class="ticket-detail-value">{{zone.zoneName}}</div>
-                        </div>
-                        <div class="ticket-detail">
-                            <div class="ticket-detail-label">Loại vé</div>
-                            <div class="ticket-detail-value">Zone Ticket</div>
                         </div>
                         {{/if}}
                         
@@ -413,11 +405,6 @@
                             <div class="ticket-detail-value">#{{ticketNumber}}</div>
                         </div>
                         {{/unless}}{{/unless}}
-                    </div>
-                    
-                    <div class="qr-code">
-                        <img src="{{qrCode}}" alt="QR Code vé {{ticketId}}">
-                        <p>Quét mã QR này tại cổng vào</p>
                     </div>
                 </div>
                 {{/each}}

@@ -275,11 +275,32 @@ router.get('/user/:userId/events', async function (req, res) {
     }
     // Lấy danh sách eventId duy nhất
     const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
+    
     // Lấy thông tin sự kiện
     const events = await Event.find({ _id: { $in: eventIds } })
       .select('_id name avatar location typeBase timeStart timeEnd')
       .lean();
-    res.status(200).json({ status: true, message: 'Lấy danh sách sự kiện đã mua vé thành công', data: events });
+    
+    // Lấy thông tin showtime cho từng sự kiện
+    const Showtime = require('../../models/events/showtimeModel');
+    const eventsWithShowtimes = await Promise.all(
+      events.map(async (event) => {
+        const showtimes = await Showtime.find({ eventId: event._id })
+          .select('startTime endTime ticketPrice ticketQuantity soldTickets')
+          .lean();
+        
+        return {
+          ...event,
+          showtimes: showtimes
+        };
+      })
+    );
+    
+    res.status(200).json({ 
+      status: true, 
+      message: 'Lấy danh sách sự kiện đã mua vé thành công', 
+      data: eventsWithShowtimes 
+    });
   } catch (e) {
     res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
   }
