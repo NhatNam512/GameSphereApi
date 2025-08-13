@@ -268,11 +268,16 @@ router.get('/count/:eventId', async function (req, res) {
 router.get('/user/:userId/events', async function (req, res) {
   try {
     const { userId } = req.params;
-    // Lấy tất cả vé của user
-    const tickets = await Ticket.find({ userId }).select('eventId').lean();
+    // Lấy tất cả vé của user với thông tin showtime
+    const tickets = await Ticket.find({ userId })
+      .select('eventId showtimeId ticketId status createdAt')
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .lean();
+      
     if (!tickets.length) {
       return res.status(200).json({ status: true, message: 'Người dùng chưa mua vé sự kiện nào', data: [] });
     }
+    
     // Lấy danh sách eventId duy nhất
     const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
     
@@ -281,25 +286,186 @@ router.get('/user/:userId/events', async function (req, res) {
       .select('_id name avatar location typeBase timeStart timeEnd')
       .lean();
     
-    // Lấy thông tin showtime cho từng sự kiện
-    const Showtime = require('../../models/events/showtimeModel');
-    const eventsWithShowtimes = await Promise.all(
-      events.map(async (event) => {
-        const showtimes = await Showtime.find({ eventId: event._id })
-          .select('startTime endTime ticketPrice ticketQuantity soldTickets')
-          .lean();
+    // Nhóm vé theo event và showtime
+    const eventsWithTickets = events.map(event => {
+      const eventTickets = tickets.filter(t => t.eventId.toString() === event._id.toString());
+      
+      // Nhóm vé theo showtime
+      const ticketsByShowtime = {};
+      eventTickets.forEach(ticket => {
+        const showtimeKey = ticket.showtimeId ? ticket.showtimeId._id.toString() : 'no-showtime';
         
-        return {
-          ...event,
-          showtimes: showtimes
-        };
-      })
-    );
+        if (!ticketsByShowtime[showtimeKey]) {
+          ticketsByShowtime[showtimeKey] = {
+            showtime: ticket.showtimeId ? {
+              _id: ticket.showtimeId._id,
+              startTime: ticket.showtimeId.startTime,
+              endTime: ticket.showtimeId.endTime,
+              ticketPrice: ticket.showtimeId.ticketPrice
+            } : null,
+            tickets: []
+          };
+        }
+        
+        ticketsByShowtime[showtimeKey].tickets.push({
+          ticketId: ticket.ticketId,
+          status: ticket.status,
+          createdAt: ticket.createdAt
+        });
+      });
+      
+      return {
+        ...event,
+        showtimes: Object.values(ticketsByShowtime).map(group => {
+          if (group.showtime) {
+            return {
+              _id: group.showtime._id,
+              startTime: group.showtime.startTime,
+              endTime: group.showtime.endTime,
+              soldTickets: group.tickets.length
+            };
+          } else {
+            // Trường hợp không có showtime
+            return {
+              _id: null,
+              startTime: null,
+              endTime: null,
+              soldTickets: group.tickets.length
+            };
+          }
+        })
+      };
+    });
     
     res.status(200).json({ 
       status: true, 
       message: 'Lấy danh sách sự kiện đã mua vé thành công', 
-      data: eventsWithShowtimes 
+      data: eventsWithTickets 
+    });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
+  }
+});
+
+// API mới: Lấy chi tiết vé với showtime của người dùng
+router.get('/user/:userId/tickets-with-showtime', async function (req, res) {
+  try {
+    const { userId } = req.params;
+    
+    // Lấy tất cả vé của user với thông tin đầy đủ
+    const tickets = await Ticket.find({ userId })
+      .select('_id ticketId eventId showtimeId status createdAt price orderId')
+      .populate('eventId', '_id name avatar location typeBase timeStart timeEnd')
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .populate('orderId', '_id totalPrice status createdAt')
+      .lean();
+      
+    if (!tickets.length) {
+      return res.status(200).json({ 
+        status: true, 
+        message: 'Người dùng chưa mua vé nào', 
+        data: [] 
+      });
+    }
+    
+    // Format dữ liệu trả về
+    const formattedTickets = tickets.map(ticket => ({
+      _id: ticket._id,
+      ticketId: ticket.ticketId,
+      status: ticket.status,
+      price: ticket.price,
+      createdAt: ticket.createdAt,
+      event: ticket.eventId ? {
+        id: ticket.eventId._id,
+        name: ticket.eventId.name,
+        avatar: ticket.eventId.avatar,
+        location: ticket.eventId.location,
+        typeBase: ticket.eventId.typeBase,
+        timeStart: ticket.eventId.timeStart,
+        timeEnd: ticket.eventId.timeEnd
+      } : null,
+      showtime: ticket.showtimeId ? {
+        id: ticket.showtimeId._id,
+        startTime: ticket.showtimeId.startTime,
+        endTime: ticket.showtimeId.endTime,
+        ticketPrice: ticket.showtimeId.ticketPrice
+      } : null,
+      order: ticket.orderId ? {
+        id: ticket.orderId._id,
+        totalPrice: ticket.orderId.totalPrice,
+        status: ticket.orderId.status,
+        createdAt: ticket.orderId.createdAt
+      } : null
+    }));
+    
+    res.status(200).json({ 
+      status: true, 
+      message: 'Lấy chi tiết vé với showtime thành công', 
+      data: formattedTickets 
+    });
+  } catch (e) {
+    res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
+  }
+});
+
+// API: Lấy vé theo showtime cụ thể
+router.get('/user/:userId/showtime/:showtimeId', async function (req, res) {
+  try {
+    const { userId, showtimeId } = req.params;
+    
+    // Lấy vé của user cho showtime cụ thể
+    const tickets = await Ticket.find({ 
+      userId, 
+      showtimeId: showtimeId 
+    })
+      .select('_id ticketId eventId showtimeId status createdAt price orderId')
+      .populate('eventId', '_id name avatar location typeBase timeStart timeEnd')
+      .populate('showtimeId', '_id startTime endTime ticketPrice')
+      .populate('orderId', '_id totalPrice status createdAt')
+      .lean();
+      
+    if (!tickets.length) {
+      return res.status(200).json({ 
+        status: true, 
+        message: 'Không tìm thấy vé cho showtime này', 
+        data: [] 
+      });
+    }
+    
+    // Format dữ liệu trả về
+    const formattedTickets = tickets.map(ticket => ({
+      _id: ticket._id,
+      ticketId: ticket.ticketId,
+      status: ticket.status,
+      price: ticket.price,
+      createdAt: ticket.createdAt,
+      event: ticket.eventId ? {
+        id: ticket.eventId._id,
+        name: ticket.eventId.name,
+        avatar: ticket.eventId.avatar,
+        location: ticket.eventId.location,
+        typeBase: ticket.eventId.typeBase,
+        timeStart: ticket.eventId.timeStart,
+        timeEnd: ticket.eventId.timeEnd
+      } : null,
+      showtime: ticket.showtimeId ? {
+        id: ticket.showtimeId._id,
+        startTime: ticket.showtimeId.startTime,
+        endTime: ticket.showtimeId.endTime,
+        ticketPrice: ticket.showtimeId.ticketPrice
+      } : null,
+      order: ticket.orderId ? {
+        id: ticket.orderId._id,
+        totalPrice: ticket.orderId.totalPrice,
+        status: ticket.orderId.status,
+        createdAt: ticket.orderId.createdAt
+      } : null
+    }));
+    
+    res.status(200).json({ 
+      status: true, 
+      message: 'Lấy vé theo showtime thành công', 
+      data: formattedTickets 
     });
   } catch (e) {
     res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
