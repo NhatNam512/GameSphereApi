@@ -9,7 +9,7 @@ const { eventSchema, eventTagsSchema } = require('../../validations/eventValidat
 const { getRecommendedEvents } = require('../../controllers/events/recommendedEvents');
 const { addTagsToEvent } = require('../../controllers/events/tagController');
 const { getTopViewedEvents } = require('../../controllers/events/interactionController');
-const { getZones } = require('../../controllers/events/zoneControllerOptimized');
+const { getZones } = require('../../controllers/events/zoneController');
 const { default: mongoose } = require('mongoose');
 const zoneTicketModel = require('../../models/events/zoneTicketModel');
 const showtimeModel = require('../../models/events/showtimeModel');
@@ -255,7 +255,9 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
       });
     }
     
-    const detail = await eventModel.findById(id);
+         const detail = await eventModel.findById(id)
+       .populate("tags", "name")
+       .lean();
     if (!detail) {
       const error = new Error('Không tìm thấy sự kiện');
       error.statusCode = 404;
@@ -266,16 +268,16 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
       detail.longitude = detail.location_map.coordinates[0];
       detail.latitude = detail.location_map.coordinates[1];
     }
-    // Lấy các suất chiếu của sự kiện
-    const showtimeModel = require('../../models/events/showtimeModel');
-    const showtimes = await showtimeModel.find({ eventId: id });
+         // Lấy các suất chiếu của sự kiện
+     const showtimeModel = require('../../models/events/showtimeModel');
+     const showtimes = await showtimeModel.find({ eventId: id }).lean();
 
     // Lấy loại vé, loại khu vực, số vé còn lại
     let ticketInfo = {};
     if (detail.typeBase === 'seat') {
-      // Lấy tất cả các zone thuộc event này
-      const zoneModel = require('../../models/events/zoneModel');
-      const zones = await zoneModel.find({ eventId: id });
+             // Lấy tất cả các zone thuộc event này
+       const zoneModel = require('../../models/events/zoneModel');
+       const zones = await zoneModel.find({ eventId: id }).lean();
       // Lấy tất cả các showtimeId của event này
       const showtimeIds = showtimes.map(st => st._id);
       // Lấy các booking đã đặt và đang giữ cho tất cả showtime
@@ -316,67 +318,62 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
           await redis.set(cacheKey, JSON.stringify({ booked, reserved }), 'EX', 60); // cache 1 phút
         }
       }
-      // Duyệt từng zone để cập nhật trạng thái ghế và đếm số ghế còn lại
-      const zonesWithStatus = zones.map(zone => {
-        let availableCount = 0;
-        const seatsWithStatus = (zone.layout && Array.isArray(zone.layout.seats)) ? zone.layout.seats.map(seat => {
-          let status = 'available';
-          if (bookedSeatIds.includes(seat.seatId)) {
-            status = 'booked';
-          } else if (reservedSeatIds.includes(seat.seatId)) {
-            status = 'reserved';
-          } else {
-            availableCount++;
-          }
-          return { ...seat.toObject ? seat.toObject() : seat, status };
-        }) : [];
-        return { ...zone.toObject(), layout: { ...zone.layout, seats: seatsWithStatus }, availableCount };
-      });
+             // Duyệt từng zone để cập nhật trạng thái ghế và đếm số ghế còn lại
+       const zonesWithStatus = zones.map(zone => {
+         let availableCount = 0;
+         const seatsWithStatus = (zone.layout && Array.isArray(zone.layout.seats)) ? zone.layout.seats.map(seat => {
+           let status = 'available';
+           if (bookedSeatIds.includes(seat.seatId)) {
+             status = 'booked';
+           } else if (reservedSeatIds.includes(seat.seatId)) {
+             status = 'reserved';
+           } else {
+             availableCount++;
+           }
+           return { ...seat, status };
+         }) : [];
+         return { ...zone, layout: { ...zone.layout, seats: seatsWithStatus }, availableCount };
+       });
       ticketInfo.zones = zonesWithStatus;
     } else if (detail.typeBase === 'zone') {
-      // Lấy tất cả zone tickets cho event này (tất cả showtimes)
-      const zoneTickets = await zoneTicketModel.find({ eventId: id });
-      // Lấy tất cả booking cho các zone ticket này
-      const zoneTicketIds = zoneTickets.map(z => z._id);
-      const bookings = await zoneBookingModel.find({
-        zoneId: { $in: zoneTicketIds },
-        status: { $in: ['booked', 'reserved'] },
-      });
+             // Lấy tất cả zone tickets cho event này (tất cả showtimes)
+       const zoneTickets = await zoneTicketModel.find({ eventId: id }).lean();
+             // Lấy tất cả booking cho các zone ticket này
+       const zoneTicketIds = zoneTickets.map(z => z._id);
+       const bookings = await zoneBookingModel.find({
+         zoneId: { $in: zoneTicketIds },
+         status: { $in: ['booked', 'reserved'] },
+       }).lean();
       // Đếm số lượng đã đặt/giữ cho từng zone ticket
       const bookingCounts = bookings.reduce((acc, booking) => {
         const zoneId = booking.zoneId.toString();
         acc[zoneId] = (acc[zoneId] || 0) + booking.quantity;
         return acc;
       }, {});
-      const zonesWithAvailability = zoneTickets.map(zone => {
-        const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
-        const availableCount = zone.totalTicketCount - bookedAndReservedCount;
-        return {
-          ...zone.toObject(),
-          availableCount: Math.max(0, availableCount),
-        };
-      });
+             const zonesWithAvailability = zoneTickets.map(zone => {
+         const bookedAndReservedCount = bookingCounts[zone._id.toString()] || 0;
+         const availableCount = zone.totalTicketCount - bookedAndReservedCount;
+         return {
+           ...zone,
+           availableCount: Math.max(0, availableCount),
+         };
+       });
       ticketInfo.zoneTickets = zonesWithAvailability;
     }
     // Nếu typeBase === 'none' thì không cần gì thêm
 
-    // Lấy tên các tag (trả về mảng tên thay vì mảng id)
-    let tagNames = [];
-    if (detail.tags && detail.tags.length > 0) {
-      // Filter out invalid ObjectIds and keep valid ones
-      const validTagIds = detail.tags.filter(tagId => 
-        typeof tagId === 'string' && mongoose.Types.ObjectId.isValid(tagId)
-      );
-      
-      if (validTagIds.length > 0) {
-        const tags = await tagModel.find({ _id: { $in: validTagIds } });
-        tagNames = tags.map(tag => tag.name);
-      }
-      
-      // If some tags are already strings (tag names), keep them
-      const stringTags = detail.tags.filter(tag => typeof tag === 'string' && !mongoose.Types.ObjectId.isValid(tag));
-      tagNames = [...tagNames, ...stringTags];
-    }
+         // Lấy tên các tag từ populated data (tối ưu như /home)
+     let tagNames = [];
+     if (detail.tags && detail.tags.length > 0) {
+       tagNames = detail.tags.map(tag => {
+         if (typeof tag === 'object' && tag.name) {
+           return tag.name;
+         }
+         return tag;
+       }).filter(tag => tag); // Remove any null/undefined values
+     } else {
+       tagNames = [];
+     }
 
     // Kiểm tra user đã review event này chưa
     let isPreview = false;
@@ -388,7 +385,7 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
       isPreview = !!existingReview;
     }
 
-    const result = { ...detail.toObject(), showtimes, ...ticketInfo, tags: tagNames, isPreview };
+         const result = { ...detail, showtimes, ...ticketInfo, tags: tagNames, isPreview };
     await redis.set(cacheKey, JSON.stringify(result), 'EX', 300);
     return res.status(200).json({
       status: true,
