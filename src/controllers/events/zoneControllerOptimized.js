@@ -1,5 +1,5 @@
+const { getSocketIO } = require('../../../socket/socket');
 const SeatBookingModel = require('../../models/events/seatBookingModel');
-const { getSocketIO } = require('../../socket/socket');
 const redisClient = require('../../redis/redisClient');
 
 // Constants
