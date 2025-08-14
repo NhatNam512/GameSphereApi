@@ -9,7 +9,7 @@ const zoneBookingModel = require("../../models/events/zoneBookingModel")
 exports.createZone = async (req, res) => {
   try {
     const userId = req.user.id;
-    const {name, rows, cols, seats} = req.body;
+    const {name, rows, cols, seats, color} = req.body;
     if( !rows || !cols || !seats) {
       return res.status(400).json({message: "Thiếu thông tin tạo vùng."});
     }
@@ -19,7 +19,7 @@ exports.createZone = async (req, res) => {
         rows: rows,
         cols: cols,
         seats: seats,
-        color: color,
+        color: color || '#c9b6f3', // Default color if not provided
       },
       createdBy: userId,
       updatedBy: userId,

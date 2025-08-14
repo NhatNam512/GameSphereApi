@@ -1,6 +1,10 @@
-const { getSocketIO } = require('../../../socket/socket');
 const SeatBookingModel = require('../../models/events/seatBookingModel');
+const zoneModel = require('../../models/events/zoneModel');
+const eventModel = require('../../models/events/eventModel');
+const ZoneTicket = require('../../models/events/zoneTicketModel');
+const zoneBookingModel = require('../../models/events/zoneBookingModel');
 const redisClient = require('../../redis/redisClient');
+const { getSocketIO } = require('../../../socket/socket');
 
 // Constants
 const RESERVATION_TIME_SECONDS = 10 * 60; // 10 minutes
@@ -199,6 +203,119 @@ class SeatLockManager {
 }
 
 // Main controller functions
+exports.createZone = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {name, rows, cols, seats, color} = req.body;
+    if( !rows || !cols || !seats) {
+      return res.status(400).json({message: "Thiếu thông tin tạo vùng."});
+    }
+    const zone = await zoneModel.create({
+      name,
+      layout: {
+        rows: rows,
+        cols: cols,
+        seats: seats,
+        color: color || '#c9b6f3', // Default color if not provided
+      },
+      createdBy: userId,
+      updatedBy: userId,
+    })
+    await zone.save();
+    res.status(200).json({message: "Tạo vùng thành công.", zoneId: zone._id,});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+};
+
+exports.getZones = async (req, res) => {
+  try {
+    // Lấy eventId từ req.params.id theo định nghĩa route /getZone/:id
+    const eventId = req.params.id;
+    const { showtimeId } = req.query;
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Thiếu eventId trong params." });
+    }
+
+    // Tìm event bằng eventId và populate trường zone
+    const event = await eventModel.findById(eventId).populate('zone').lean();
+
+    if (!event) {
+        return res.status(404).json({ message: "Không tìm thấy sự kiện." });
+    }
+
+    if(event.typeBase == 'none'){
+      return res.status(200).json({ message: "Sự kiện chưa có sơ đồ chỗ ngồi hoặc zone không tồn tại.", zones: [] });
+    }
+    if(event.typeBase == 'seat'){
+      // Lấy tất cả các zone thuộc event này
+      const zones = await zoneModel.find({ eventId: eventId }).lean();
+      if (!zones || zones.length === 0) {
+        return res.status(200).json({ message: "Sự kiện chưa có sơ đồ chỗ ngồi.", zones: [] });
+      }
+      // Lấy trạng thái ghế từ Redis (ưu tiên in-memory)
+      const cacheKey = `seatStatus:${eventId}:${showtimeId}`;
+      let booked = [], reserved = [];
+      const cacheData = await redisClient.get(cacheKey);
+      if (cacheData) {
+        ({ booked = [], reserved = [] } = JSON.parse(cacheData));
+      } else {
+        // Nếu cache miss, fallback truy vấn lại toàn bộ
+        const [bookedBookings, reservedBookings] = await Promise.all([
+          SeatBookingModel.find({ eventId, showtimeId, status: 'booked' }, { seats: 1 }).lean(),
+          SeatBookingModel.find({ eventId, showtimeId, status: 'reserved' }, { seats: 1 }).lean(),
+        ]);
+        booked = bookedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+        reserved = reservedBookings.flatMap(booking => booking.seats.map(seat => seat.seatId));
+        // Cập nhật cache luôn
+        await redisClient.set(cacheKey, JSON.stringify({ booked, reserved }), 'EX', 60);
+      }
+      // Duyệt từng zone để cập nhật trạng thái ghế
+      const zonesWithStatus = zones.map(zone => {
+        const seatsWithStatus = (zone.layout && Array.isArray(zone.layout.seats)) ? zone.layout.seats.map(seat => {
+          let status = 'available';
+          if (booked.includes(seat.seatId)) {
+            status = 'booked';
+          } else if (reserved.includes(seat.seatId)) {
+            status = 'reserved';
+          }
+          return { ...seat, status };
+        }) : [];
+        return { ...zone, layout: { ...zone.layout, seats: seatsWithStatus } };
+      });
+      return res.status(200).json({ message: "Lấy sơ đồ chỗ ngồi thành công.", zones: zonesWithStatus });
+    }
+    if(event.typeBase=='zone'){
+      const zones = await ZoneTicket.find({ showtimeId: showtimeId }).lean();
+      if (!zones || zones.length === 0) {
+        return res.status(200).json({ message: "Sự kiện chưa có khu vực vé.", zones: [] });
+      }
+
+      // Lấy bookings theo showtimeId
+      const bookings = await zoneBookingModel.find({
+        showtimeId: showtimeId,
+        status: 'reserved'
+      }).lean();
+
+      // Cập nhật trạng thái zone dựa trên bookings
+      const zonesWithStatus = zones.map(zone => {
+        const booking = bookings.find(b => b.zoneId.toString() === zone._id.toString());
+        const status = booking ? 'reserved' : 'available';
+        return { ...zone, status };
+      });
+
+      return res.status(200).json({ message: "Lấy khu vực vé thành công.", zones: zonesWithStatus });
+    }
+
+    return res.status(400).json({ message: "Loại sự kiện không hợp lệ." });
+
+  } catch (error) {
+    console.error("Lỗi getZones:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 exports.reserveSeats = async (req, res) => {
   const { eventId, showtimeId, seat, action } = req.body;
   const userId = req.user.id;
