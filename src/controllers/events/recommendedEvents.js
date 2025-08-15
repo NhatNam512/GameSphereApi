@@ -90,10 +90,8 @@ function countMatchingTags(eventTags, userTags) {
  */
 exports.getRecommendedEvents = async (req, res) => {
   const userId = req.user.id;
-  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-  const page = Math.max(parseInt(req.query.page) || 1, 1);
-  const skip = (page - 1) * limit;
-  const cacheKey = `recommend:${userId}:v1:${page}:${limit}`;
+  const limit = 10; // Cố định lấy 10 sự kiện
+  const cacheKey = `recommend:${userId}:v2`;
   const now = new Date();
   const startTime = Date.now();
 
@@ -105,94 +103,89 @@ exports.getRecommendedEvents = async (req, res) => {
       return res.json(JSON.parse(cached));
     }
 
-    // 2. Lấy user & interaction
+    // 2. Lấy thông tin user
     const user = await User.findById(userId);
-
-    const interactions = await Interaction.find({ userId });
-    console.log("Interactions:", interactions);
-
-    // 3. Cold start nếu user chưa có lịch sử
-    if (interactions.length === 0) {
-      const events = await Event.find(buildColdStartQuery(user, now))
-        .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
-        .skip(skip).limit(limit).lean();
-      const enrichedEvents = await enrichEventData(events);
-      // Thêm showtimes cho từng event
-      for (const ev of enrichedEvents) {
-        ev.showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
-      }
-      const response = { from: 'cold-start', events: enrichedEvents };
-      await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);
-      console.log(`[Recommend] user=${userId} time=${Date.now() - startTime}ms source=cold-start`);
-      return res.json({ status: 200, data: response });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // 4. Personalized: Lấy top events từng tương tác nhất
-    const topInteractions = await Interaction.aggregate([
-      { $match: { userId } },
-      { $group: { _id: '$eventId', total: { $sum: '$value' } } },
-      { $sort: { total: -1 } },
-      { $limit: 3 }
-    ]);
-    const eventIds = topInteractions.map(i => i._id);
-    const topEvents = await Event.find({ _id: { $in: eventIds } });
-    const tags = collectUserTags(user, topEvents);
-    const seenEventIds = interactions.map(i => i.eventId);
-
-    // 5. Query sự kiện gợi ý
-    let query = {};
-    if (user.tags?.length) {
-      query.tags = { $in: user.tags };
-    }
-    if (user.location?.coordinates?.length) {
-      query.location = {
-        $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: user.location.coordinates
-          },
-          $maxDistance: 20000 // 20km
-        }
-      };
-    }
-    console.log("Event query:", query);
-
-    const recommended = await Event.find(query)
+    // 3. Lấy tất cả sự kiện sắp diễn ra
+    const events = await Event.find({
+      timeStart: { $gt: now } // Chỉ lấy sự kiện chưa diễn ra
+    })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
-      .skip(skip).limit(limit).lean();
-    // Sắp xếp các sự kiện có nhiều tag trùng với user lên đầu
+      .lean();
+
+    // 4. Tính điểm tag matching và sắp xếp
     const userTags = user.tags || [];
-    recommended.sort((a, b) =>
-      countMatchingTags(b.tags, userTags) - countMatchingTags(a.tags, userTags)
-    );
-    // Thêm showtimes cho từng event
-    const enrichedRecommended = await enrichEventData(recommended);
-    for (const ev of enrichedRecommended) {
+    const eventsWithScore = events.map(event => {
+      const matchingTags = countMatchingTags(event.tags || [], userTags);
+      return {
+        ...event,
+        matchingScore: matchingTags
+      };
+    });
+
+    // 5. Sắp xếp theo số tag trùng khớp (cao nhất lên đầu) và lấy top 10
+    const recommended = eventsWithScore
+      .sort((a, b) => b.matchingScore - a.matchingScore)
+      .slice(0, limit);
+
+    // 6. Thêm showtimes và tính giá vé min/max cho từng event
+    for (const ev of recommended) {
       ev.showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
+      
+      // Tính giá vé min/max giống như trong /home
+      let ticketPrices = [];
+
+      if (ev.typeBase === 'seat') {
+        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
+        zones.forEach(zone => {
+          if (zone?.layout?.seats) {
+            const prices = zone.layout.seats
+              .filter(seat => seat.price > 0) // Loại bỏ seat có price = 0
+              .map(seat => seat.price)
+              .filter(price => price !== undefined && price !== null);
+            ticketPrices.push(...prices);
+          }
+        });
+      } else if (ev.typeBase === 'zone') {
+        const zoneTickets = await zoneTicketModel.find({ eventId: ev._id }).select('price');
+        ticketPrices = zoneTickets
+          .map(t => t.price)
+          .filter(price => price > 0 && price !== undefined && price !== null); // Loại bỏ price = 0
+      } else if (ev.typeBase === 'none') {
+        const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
+        ticketPrices = showtimes
+          .map(st => st.ticketPrice)
+          .filter(price => price > 0 && price !== undefined && price !== null); // Loại bỏ price = 0
+      }
+      
+      if (ticketPrices.length > 0) {
+        ev.minTicketPrice = Math.min(...ticketPrices);
+        ev.maxTicketPrice = Math.max(...ticketPrices);
+      } else {
+        ev.minTicketPrice = null;
+        ev.maxTicketPrice = null;
+      }
+      
+      delete ev.matchingScore; // Xóa score khỏi response
     }
-    const response = { from: 'personalized', events: enrichedRecommended };
+
+    const response = { 
+      from: 'tag-based', 
+      events: recommended,
+      userTags: userTags
+    };
+
+    // Cache trong 5 phút
     await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);
-    console.log(`[Recommend] user=${userId} time=${Date.now() - startTime}ms source=personalized`);
+    
+    console.log(`[Recommend] user=${userId} time=${Date.now() - startTime}ms source=tag-based events=${recommended.length}`);
     return res.json({ status: 200, data: response });
 
   } catch (err) {
-    // 6. Fallback: Recommend các sự kiện phổ biến nếu có lỗi ở trên
-    try {
-      const fallbackEvents = await Event.find({
-        startDate: { $gt: now },
-      })
-        .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
-        .sort({ popularity: -1 }).limit(limit).lean();
-
-      const enrichedFallback = await enrichEventData(fallbackEvents);
-      for (const ev of enrichedFallback) {
-        ev.showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
-      }
-      const response = { from: 'fallback', events: enrichedFallback };
-      console.log(`[Recommend] user=${userId} time=${Date.now() - startTime}ms source=fallback`);
-      return res.json({ status: 200, data: response });
-    } catch (fallbackErr) {
-      return res.status(500).json({ error: fallbackErr.message });
-    }
+    console.error('Error in getRecommendedEvents:', err);
+    return res.status(500).json({ error: err.message });
   }
 };

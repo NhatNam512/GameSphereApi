@@ -280,6 +280,17 @@ exports.createTicket = async (req, res) => {
                     // Cập nhật trạng thái giữ chỗ ghế thành 'booked' (nếu cần)
                     seatBooking.status = 'booked';
                     await seatBooking.save({ session });
+                    
+                    // Xóa Redis lock cho từng ghế đã book
+                    for (const seat of seatBooking.seats) {
+                        try {
+                            const seatRedisKey = `seatReserve:${seat.zoneId}:${seat.seatId}:${seatBooking.userId}`;
+                            await redisClient.del(seatRedisKey);
+                            console.log(`✅ Đã xóa Redis key: ${seatRedisKey}`);
+                        } catch (redisError) {
+                            console.warn(`⚠️ Lỗi xóa Redis key cho ghế ${seat.seatId}:`, redisError.message);
+                        }
+                    }
                     continue;
                 }
                 // Thử tìm booking zone
@@ -329,8 +340,13 @@ exports.createTicket = async (req, res) => {
                     zoneBooking.status = 'booked';
                     await zoneBooking.save({ session });
                     // Xóa Redis lock nếu có
-                    const redisKey = `zoneReserve:${zoneBooking.zoneId}:${zoneBooking.userId}`;
-                    await redisClient.del(redisKey);
+                    try {
+                        const redisKey = `zoneReserve:${zoneBooking.zoneId}:${zoneBooking.userId}`;
+                        await redisClient.del(redisKey);
+                        console.log(`✅ Đã xóa Redis key: ${redisKey}`);
+                    } catch (redisError) {
+                        console.warn(`⚠️ Lỗi xóa Redis key cho zone ${zoneBooking.zoneId}:`, redisError.message);
+                    }
                     continue;
                 }
                 await session.abortTransaction();
@@ -359,8 +375,22 @@ exports.createTicket = async (req, res) => {
         }
         // Tạo vé
         const createdTickets = await Ticket.insertMany(ticketsToInsert, { session });
-        // Xóa cache Redis chi tiết sự kiện
-        await redisClient.del(`events_detail_${order.eventId}`);
+        // Xóa cache Redis chi tiết sự kiện và cache ghế
+        try {
+            await redisClient.del(`events_detail_${order.eventId}`);
+            console.log(`✅ Đã xóa cache event detail: events_detail_${order.eventId}`);
+        } catch (redisError) {
+            console.warn(`⚠️ Lỗi xóa cache event detail:`, redisError.message);
+        }
+        
+        // Xóa cache ghế cho showtime này
+        try {
+            await redisClient.del(`seats_${order.eventId}_${order.showtimeId}`);
+            console.log(`✅ Đã xóa cache seats: seats_${order.eventId}_${order.showtimeId}`);
+        } catch (redisError) {
+            console.warn(`⚠️ Lỗi xóa cache seats:`, redisError.message);
+        }
+        
         await session.commitTransaction();
         
         // Gửi email vé (không cần chờ để không ảnh hưởng response time)

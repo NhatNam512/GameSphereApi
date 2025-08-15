@@ -271,6 +271,7 @@ router.get('/user/:userId/events', async function (req, res) {
     // Lấy tất cả vé của user với thông tin showtime
     const tickets = await Ticket.find({ userId })
       .select('eventId showtimeId ticketId status createdAt')
+      .populate('eventId', '_id name avatar location typeBase timeStart timeEnd')
       .populate('showtimeId', '_id startTime endTime ticketPrice')
       .lean();
       
@@ -281,14 +282,15 @@ router.get('/user/:userId/events', async function (req, res) {
     // Lấy danh sách eventId duy nhất
     const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
     
-    // Lấy thông tin sự kiện
-    const events = await Event.find({ _id: { $in: eventIds } })
-      .select('_id name avatar location typeBase timeStart timeEnd')
-      .lean();
+         // Lấy thông tin sự kiện (đã có từ populate ở trên)
+     const events = eventIds.map(eventId => {
+       const eventTickets = tickets.filter(t => t.eventId._id.toString() === eventId);
+       return eventTickets[0]?.eventId;
+     }).filter(Boolean);
     
-    // Nhóm vé theo event và showtime
-    const eventsWithTickets = events.map(event => {
-      const eventTickets = tickets.filter(t => t.eventId.toString() === event._id.toString());
+         // Nhóm vé theo event và showtime
+     const eventsWithTickets = events.map(event => {
+       const eventTickets = tickets.filter(t => t.eventId._id.toString() === event._id.toString());
       
       // Nhóm vé theo showtime
       const ticketsByShowtime = {};
@@ -337,11 +339,18 @@ router.get('/user/:userId/events', async function (req, res) {
       };
     });
     
-    res.status(200).json({ 
-      status: true, 
-      message: 'Lấy danh sách sự kiện đã mua vé thành công', 
-      data: eventsWithTickets 
-    });
+         // Sắp xếp theo thời gian sự kiện gần diễn ra nhất
+     const sortedEvents = eventsWithTickets.sort((a, b) => {
+       const timeA = a.timeStart;
+       const timeB = b.timeStart;
+       return new Date(timeA) - new Date(timeB);
+     });
+     
+     res.status(200).json({ 
+       status: true, 
+       message: 'Lấy danh sách sự kiện đã mua vé thành công', 
+       data: sortedEvents 
+     });
   } catch (e) {
     res.status(500).json({ status: false, message: 'Lỗi server: ' + e.message });
   }
@@ -482,7 +491,7 @@ router.get('/grouped/:userId', async function (req, res) {
     // Lấy tất cả vé của user với thông tin cần thiết
     const tickets = await Ticket.find({ userId })
       .select('_id ticketId eventId showtimeId orderId price status createdAt')
-      .populate('eventId', '_id name avatar location')
+      .populate('eventId', '_id name avatar location timeStart timeEnd')
       .populate('showtimeId', '_id startTime endTime')
       .populate('orderId', '_id totalPrice status createdAt')
       .lean();
@@ -521,26 +530,28 @@ router.get('/grouped/:userId', async function (req, res) {
       const showtimeId = ticket.showtimeId?._id?.toString() || 'no-showtime';
       const groupKey = `${eventId}-${showtimeId}`;
       
-      if (!groupedTickets[groupKey]) {
-        groupedTickets[groupKey] = {
-          eventId: ticket.eventId?._id,
-          eventName: ticket.eventId?.name,
-          eventAvatar: ticket.eventId?.avatar,
-          eventLocation: ticket.eventId?.location,
-          showtimeId: ticket.showtimeId?._id || null,
-          showtimeStart: ticket.showtimeId?.startTime || null,
-          showtimeEnd: ticket.showtimeId?.endTime || null,
-          orderId: ticket.orderId?._id,
-          orderTotalPrice: ticket.orderId?.totalPrice || 0,
-          orderStatus: ticket.orderId?.status,
-          orderCreatedAt: ticket.orderId?.createdAt,
-          ticketStatus: ticket.status,
-          ticketCreatedAt: ticket.createdAt,
-          quantity: 0,
-          totalPrice: 0,
-          ticketIds: []
-        };
-      }
+             if (!groupedTickets[groupKey]) {
+         groupedTickets[groupKey] = {
+           eventId: ticket.eventId?._id,
+           eventName: ticket.eventId?.name,
+           eventAvatar: ticket.eventId?.avatar,
+           eventLocation: ticket.eventId?.location,
+           eventTimeStart: ticket.eventId?.timeStart,
+           eventTimeEnd: ticket.eventId?.timeEnd,
+           showtimeId: ticket.showtimeId?._id || null,
+           showtimeStart: ticket.showtimeId?.startTime || null,
+           showtimeEnd: ticket.showtimeId?.endTime || null,
+           orderId: ticket.orderId?._id,
+           orderTotalPrice: ticket.orderId?.totalPrice || 0,
+           orderStatus: ticket.orderId?.status,
+           orderCreatedAt: ticket.orderId?.createdAt,
+           ticketStatus: ticket.status,
+           ticketCreatedAt: ticket.createdAt,
+           quantity: 0,
+           totalPrice: 0,
+           ticketIds: []
+         };
+       }
       
       // Cộng dồn số lượng và giá tiền
       groupedTickets[groupKey].quantity += 1;
@@ -548,8 +559,16 @@ router.get('/grouped/:userId', async function (req, res) {
       groupedTickets[groupKey].ticketIds.push(ticket.ticketId);
     });
 
+    // Sắp xếp theo thời gian sự kiện gần diễn ra nhất
+    const sortedGroups = Object.values(groupedTickets).sort((a, b) => {
+      // Ưu tiên showtime trước, nếu không có thì dùng event timeStart
+      const timeA = a.showtimeStart || a.eventTimeStart || a.ticketCreatedAt;
+      const timeB = b.showtimeStart || b.eventTimeStart || b.ticketCreatedAt;
+      return new Date(timeA) - new Date(timeB); // Sự kiện gần nhất lên đầu
+    });
+
     // Chuyển đổi object thành array và format lại
-    const result = Object.values(groupedTickets).map(group => ({
+    const result = sortedGroups.map(group => ({
       eventId: group.eventId,
       eventName: group.eventName,
       eventAvatar: group.eventAvatar,

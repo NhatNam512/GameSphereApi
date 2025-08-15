@@ -26,6 +26,11 @@ router.post("/createOrder", createOrder);
 router.post("/createTicket", createTicket);
 router.get('/buyers/:eventId', ordersController.getBuyersByEvent);
 
+// Lịch sử đơn hàng của người dùng
+router.get('/user/:userId/history', ordersController.getUserOrderHistory);
+router.get('/user/:userId/stats', ordersController.getUserOrderStats);
+router.get('/detail/:orderId', ordersController.getOrderDetail);
+
 // Lấy toàn bộ order của 1 sự kiện
 router.get('/event/:eventId', async function (req, res) {
     try {

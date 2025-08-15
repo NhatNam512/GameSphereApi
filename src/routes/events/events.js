@@ -757,21 +757,31 @@ router.get("/search", async function (req, res) {
         ev.latitude = ev.location_map.coordinates[1];
       }
 
+      // Tính giá vé min/max giống như trong /home
       let ticketPrices = [];
 
-      if (ev.typeBase === 'seat') {
-        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
-        zones.forEach(zone => {
-          const prices = zone.layout?.seats?.map(seat => seat.price).filter(p => p != null);
-          ticketPrices.push(...(prices || []));
-        });
-      } else if (ev.typeBase === 'zone') {
-        const zoneTickets = await zoneTicketModel.find({ eventId: ev._id }).select('price');
-        ticketPrices = zoneTickets.map(t => t.price).filter(p => p != null);
-      } else if (ev.typeBase === 'none') {
-        const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
-        ticketPrices = showtimes.map(st => st.ticketPrice).filter(p => p != null);
-      }
+             if (ev.typeBase === 'seat') {
+         const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price');
+         zones.forEach(zone => {
+           if (zone?.layout?.seats) {
+             const prices = zone.layout.seats
+               .filter(seat => seat.price > 0) // Loại bỏ seat có price = 0
+               .map(seat => seat.price)
+               .filter(price => price !== undefined && price !== null);
+             ticketPrices.push(...prices);
+           }
+         });
+       } else if (ev.typeBase === 'zone') {
+         const zoneTickets = await zoneTicketModel.find({ eventId: ev._id }).select('price');
+         ticketPrices = zoneTickets
+           .map(t => t.price)
+           .filter(price => price > 0 && price !== undefined && price !== null); // Loại bỏ price = 0
+       } else if (ev.typeBase === 'none') {
+         const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
+         ticketPrices = showtimes
+           .map(st => st.ticketPrice)
+           .filter(price => price > 0 && price !== undefined && price !== null); // Loại bỏ price = 0
+       }
 
       ev.minTicketPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : null;
       ev.maxTicketPrice = ticketPrices.length > 0 ? Math.max(...ticketPrices) : null;
