@@ -101,7 +101,7 @@ exports.getAllTicketsByEvent = async (req, res) => {
     return res.json({ status: true, data: result });
   } catch (e) {
     console.error('Error in getAllTicketsByEvent:', e);
-    return res.status(500).json({ status: false, message: 'Lỗi hệ thống.' });
+    return res.status(500).json({ status: false, message: 'Lỗi hệ thống.'+e });
   }
 };
 
@@ -153,8 +153,8 @@ const handleZoneTickets = async (eventId) => {
     ticketId: ticket.ticketId,
     zoneTicketId: ticket.zone?.zoneId,
     zoneName: ticket.zone?.zoneName,
-    userId: ticket.userId._id,
-    userName: ticket.userId.name || ticket.userId.email,
+    userId: ticket.userId?._id || null,
+    userName: ticket.userId?.name || ticket.userId?.email || 'Unknown User',
     status: ticket.status,
     issuedAt: ticket.issuedAt,
     price: ticket.price
@@ -165,8 +165,8 @@ const handleZoneTickets = async (eventId) => {
       bookingId: booking._id,
       ticketId: booking.zoneTicketId,
       quantity: booking.quantity,
-      userId: booking.userId._id,
-      userName: booking.userId.name || booking.userId.email
+      userId: booking.userId?._id || null,
+      userName: booking.userId?.name || booking.userId?.email || 'Unknown User'
     }));
   }
 
@@ -287,8 +287,8 @@ const handleSeatTickets = async (eventId) => {
       ticketId: ticket.ticketId,
       zoneTicketId: zoneId,
       zoneName: zoneName,
-      userId: ticket.userId._id,
-      userName: ticket.userId.name || ticket.userId.email,
+      userId: ticket.userId?._id || null,
+      userName: ticket.userId?.name || ticket.userId?.email || 'Unknown User',
       status: ticket.status,
       issuedAt: ticket.issuedAt
     };
@@ -312,8 +312,8 @@ const handleSeatTickets = async (eventId) => {
           ticketId: booking._id, // Using bookingId as ticketId for consistency
           zoneTicketId: seat.zoneId,
           zoneName: zoneName,
-          userId: booking.userId._id,
-          userName: booking.userId.name || booking.userId.email,
+          userId: booking.userId?._id || null,
+          userName: booking.userId?.name || booking.userId?.email || 'Unknown User',
           status: 'booked',
           issuedAt: booking.createdAt
         };
@@ -364,8 +364,8 @@ const handleNoneTickets = async (eventId) => {
     zoneTicketId: null, // Not applicable for 'none' type
     zoneName: null, // Not applicable for 'none' type
     showtimeId: ticket.showtimeId,
-    userId: ticket.userId._id,
-    userName: ticket.userId.name || ticket.userId.email,
+    userId: ticket.userId?._id || null,
+    userName: ticket.userId?.name || ticket.userId?.email || 'Unknown User',
     status: ticket.status,
     issuedAt: ticket.issuedAt,
     price: ticket.price,

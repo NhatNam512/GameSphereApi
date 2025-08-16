@@ -3,7 +3,6 @@ const showtimeModel = require("../../models/events/showtimeModel");
 const seatBookingModel = require("../../models/events/seatBookingModel");
 const zoneModel = require("../../models/events/zoneModel");
 const ZoneTicket = require("../../models/events/zoneTicketModel");
-const redisClient = require('../../redis/redisClient');
 
 // Helper: Group array by key
 function groupBy(arr, key) {
@@ -82,9 +81,6 @@ function groupRevenueByDate(orders, type = 'day') {
 exports.getEvents = async (req, res) => {
   try {
     const userId = req.user.id;
-    const cacheKey = `getEvents:${userId}`;
-    const cached = await redisClient.get(cacheKey);
-    if (cached) return res.status(200).json(JSON.parse(cached));
 
     // 1. Lấy tất cả events của user
     const events = await eventModel.find({ userId }).select("_id name typeBase timeStart timeEnd ticketPrice avatar location location_map createdAt approvalStatus approvalReason").lean();
@@ -183,7 +179,6 @@ exports.getEvents = async (req, res) => {
       totalRevenueByYear,
       approvalStats
     };
-    await redisClient.set(cacheKey, JSON.stringify(response), 'EX', 300);
     res.status(200).json(response);
   } catch (e) {
     console.error("❌ getEvents error:", e);

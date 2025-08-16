@@ -3,7 +3,7 @@ const redis = require('../../redis/redisClient');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const sgMail = require("@sendgrid/mail");
-const { sendOtpEmail } = require('../../services/mailService');
+const { sendOtpEmail, sendForgetOtpEmail } = require('../../services/mailService');
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Gửi OTP qua email
@@ -22,7 +22,7 @@ exports.requestForgotPassword = async (req, res) => {
   await redis.set(`forgot_otp:${email}`, otp, 'EX', 300); // 5 phút
 
   // Gửi email
-  await sendOtpEmail(email, otp)
+  await sendForgetOtpEmail(email, otp)
   .then((res) => console.log('✅ Email sent:', res))
   .catch((err) => console.error('❌ Error sending email:', err));;
 

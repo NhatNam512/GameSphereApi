@@ -14,6 +14,15 @@ async function sendOtpEmail(to, otp) {
   });
 }
 
+async function sendForgetOtpEmail(to, otp) {
+  return resend.emails.send({
+    from: 'EventSphere <noreply@api.eventsphere.io.vn>',
+    to,
+    subject: 'Mã xác nhận lấy lại mật khẩu',
+    html: `<p>Mã OTP của bạn là: <strong>${otp}</strong>. Có hiệu lực trong 5 phút.</p>`,
+  });
+}
+
 async function sendTicketEmail(ticketData) {
   try {
     // Đọc template HTML
@@ -150,4 +159,4 @@ async function sendGroupInviteEmail(inviteData) {
   }
 }
 
-module.exports = { sendOtpEmail, sendTicketEmail, sendGroupInviteEmail };
+module.exports = { sendOtpEmail, sendTicketEmail, sendGroupInviteEmail, sendForgetOtpEmail };
