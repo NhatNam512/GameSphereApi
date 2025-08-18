@@ -1221,16 +1221,19 @@ router.put('/postpone/:eventId', async function (req, res) {
     await redis.del(`events_detail_${eventId}`);
     await redis.del(`getEvents:${event.userId}`);
 
-    // Thông báo qua socket
-    const socketMessage = {
-      type: 'EVENT_POSTPONED',
-      eventId: event._id,
-      eventName: event.name,
-      reason: reason || 'Sự kiện đã được hoãn',
-      organizerId: event.userId,
-      timestamp: new Date()
-    };
-    await pub.publish("event_updates", JSON.stringify(socketMessage));
+    // Thông báo qua socket cho user đang ở màn hình sự kiện
+    const { getSocketIO } = require('../../../socket/socket');
+    const io = getSocketIO();
+    
+    if (io) {
+      io.emit('adminPostponeEvent', {
+        eventId: event._id,
+        reason: reason || 'Sự kiện đã được hoãn',
+        adminId: req.user.id,
+        eventName: event.name,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return res.status(200).json({
       status: true,

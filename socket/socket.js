@@ -91,6 +91,72 @@ function initializeSocket(server) {
             console.log(`👥 Socket ${socket.id} left group_${groupId}`);
         });
 
+        // ✅ Join event room để tracking user đang ở màn hình sự kiện
+        socket.on("joinEventRoom", (data) => {
+            const { eventId, userId } = data;
+            if (!eventId || !userId) return;
+            
+            socket.join(`event_${eventId}`);
+            
+            // Lưu vào Redis với TTL 1 giờ
+            const redis = require('../src/redis/redisClient');
+            redis.setex(`user_event:${userId}`, 3600, eventId);
+            
+            console.log(`🎫 User ${userId} joined event room: ${eventId} | Socket: ${socket.id} | Client: ${socket.clientInfo.isAPK ? 'APK' : 'Web'}`);
+        });
+
+        // ✅ Leave event room
+        socket.on("leaveEventRoom", (data) => {
+            const { eventId, userId } = data;
+            if (!eventId || !userId) return;
+            
+            socket.leave(`event_${eventId}`);
+            
+            // Xóa khỏi Redis
+            const redis = require('../src/redis/redisClient');
+            redis.del(`user_event:${userId}`);
+            
+            console.log(`🎫 User ${userId} left event room: ${eventId} | Socket: ${socket.id}`);
+        });
+
+        // ✅ Admin hoãn sự kiện - gửi thông báo real-time
+        socket.on("adminPostponeEvent", async (data) => {
+            const { eventId, reason, adminId } = data;
+            if (!eventId) return;
+            
+            try {
+                const redis = require('../src/redis/redisClient');
+                
+                // Tìm tất cả user đang ở event này
+                const keys = await redis.keys(`user_event:*`);
+                const affectedUsers = [];
+                
+                for (const key of keys) {
+                    const userEventId = await redis.get(key);
+                    if (userEventId === eventId) {
+                        const userId = key.split(':')[1];
+                        affectedUsers.push(userId);
+                    }
+                }
+                
+                // Gửi thông báo cho từng user
+                affectedUsers.forEach(userId => {
+                    io.to(`user_${userId}`).emit('eventPostponed', {
+                        eventId: eventId,
+                        message: 'Sự kiện đã bị hoãn',
+                        reason: reason || 'Sự kiện đã bị hoãn bởi ban tổ chức',
+                        adminId: adminId,
+                        timestamp: new Date().toISOString()
+                    });
+                });
+                
+                console.log(`🚫 Event ${eventId} postponed by admin ${adminId}. Notified ${affectedUsers.length} users.`);
+                
+            } catch (error) {
+                console.error(`❌ Error in adminPostponeEvent:`, error.message);
+            }
+        });
+
         // ✅ Enhanced heartbeat cho APK - client gửi ping
         socket.on("ping", (callback) => {
             const timestamp = Date.now();
