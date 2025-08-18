@@ -109,9 +109,14 @@ exports.getRecommendedEvents = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // 3. Lấy tất cả sự kiện sắp diễn ra
+    // 3. Lấy tất cả sự kiện sắp diễn ra (chỉ lấy sự kiện đã duyệt hoặc chưa có trạng thái)
     const events = await Event.find({
-      timeStart: { $gt: now } // Chỉ lấy sự kiện chưa diễn ra
+      timeStart: { $gt: now }, // Chỉ lấy sự kiện chưa diễn ra
+      $or: [
+        { approvalStatus: 'approved' },
+        { approvalStatus: null },
+        { approvalStatus: { $exists: false } }
+      ]
     })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
       .lean();

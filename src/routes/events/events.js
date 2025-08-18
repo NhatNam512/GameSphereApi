@@ -1235,6 +1235,30 @@ router.put('/postpone/:eventId',authenticate ,async function (req, res) {
       });
     }
 
+    // Gửi email thông báo cho những người đã mua vé (đơn đã paid)
+    try {
+      const Order = require('../../models/events/orderModel');
+      const User = require('../../models/userModel');
+      const { sendEventPostponeEmail } = require('../../services/mailService');
+
+      const paidOrders = await Order.find({ eventId, status: 'paid' }).populate('userId', 'email');
+      const uniqueEmails = [...new Set(paidOrders.map(o => o.userId?.email).filter(Boolean))];
+
+      await Promise.all(
+        uniqueEmails.map(email => sendEventPostponeEmail({
+          to: email,
+          eventName: event.name,
+          reason: event.approvalReason,
+          timeStart: event.timeStart,
+          timeEnd: event.timeEnd,
+          contact: 'support@eventsphere.io.vn'
+        }))
+      );
+      console.log(`📧 Sent postpone emails to ${uniqueEmails.length} buyers.`);
+    } catch (mailErr) {
+      console.error('❌ Error sending postpone emails:', mailErr.message);
+    }
+
     return res.status(200).json({
       status: true,
       message: "Hoãn sự kiện thành công",

@@ -139,15 +139,25 @@ function initializeSocket(server) {
                     }
                 }
                 
-                // Gửi thông báo cho từng user
+                console.log(`🔍 Found ${affectedUsers.length} users in event ${eventId}:`, affectedUsers);
+                
+                // Gửi thông báo cho từng user qua user room
                 affectedUsers.forEach(userId => {
                     io.to(`user_${userId}`).emit('eventPostponed', {
                         eventId: eventId,
-                        message: 'Sự kiện đã bị hoãn',
-                        reason: reason || 'Sự kiện đã bị hoãn bởi ban tổ chức',
+                        message: reason || 'Sự kiện đã bị hoãn bởi ban tổ chức',
                         adminId: adminId,
                         timestamp: new Date().toISOString()
                     });
+                    console.log(`📤 Sent eventPostponed to user_${userId}`);
+                });
+                
+                // Cũng gửi đến event room để đảm bảo
+                io.to(`event_${eventId}`).emit('eventPostponed', {
+                    eventId: eventId,
+                    message: reason || 'Sự kiện đã bị hoãn bởi ban tổ chức',
+                    adminId: adminId,
+                    timestamp: new Date().toISOString()
                 });
                 
                 console.log(`🚫 Event ${eventId} postponed by admin ${adminId}. Notified ${affectedUsers.length} users.`);

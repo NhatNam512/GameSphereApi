@@ -57,6 +57,7 @@ exports.createInteraction = async (req, res) => {
 exports.getEventTotalScores = async (req, res) => {
     const fromDate = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
     const limit = parseInt(req.query.limit) || 10;
+    const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000; // Không lấy sự kiện đã kết thúc quá 7 ngày
   
     try {
       const result = await Interaction.aggregate([
@@ -88,6 +89,12 @@ exports.getEventTotalScores = async (req, res) => {
           }
         },
         { $unwind: '$event' },
+        // Lọc sự kiện chưa kết thúc quá 7 ngày (giữ ongoing/upcoming hoặc mới kết thúc <= 7 ngày)
+        { $match: { $or: [
+          { 'event.timeEnd': { $gte: cutoffMs } },
+          { 'event.timeEnd': { $exists: false } },
+          { 'event.timeEnd': null }
+        ] } },
         { $sort: { totalScore: -1 } },
         { $limit: limit }
       ]);

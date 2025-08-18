@@ -159,4 +159,37 @@ async function sendGroupInviteEmail(inviteData) {
   }
 }
 
-module.exports = { sendOtpEmail, sendTicketEmail, sendGroupInviteEmail, sendForgetOtpEmail };
+// Gửi email thông báo hoãn sự kiện
+async function sendEventPostponeEmail({ to, eventName, reason, timeStart, timeEnd, contact }) {
+  try {
+    const templatePath = path.join(__dirname, '../templates/postponeEmail.html');
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const template = handlebars.compile(templateSource);
+
+    const emailData = {
+      eventName,
+      reason: reason || 'Sự kiện đã được hoãn bởi ban tổ chức',
+      timeStart: timeStart ? new Date(timeStart).toLocaleString('vi-VN') : '',
+      timeEnd: timeEnd ? new Date(timeEnd).toLocaleString('vi-VN') : '',
+      contact: contact || 'support@eventsphere.io.vn'
+    };
+
+    const htmlContent = template(emailData);
+
+    const mailOptions = {
+      from: 'EventSphere <noreply@eventsphere.io.vn>',
+      to,
+      subject: `Thông báo hoãn sự kiện: ${eventName}`,
+      html: htmlContent
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Postpone email sent:', to, result.messageId);
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending postpone email:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+module.exports = { sendOtpEmail, sendTicketEmail, sendGroupInviteEmail, sendForgetOtpEmail, sendEventPostponeEmail };

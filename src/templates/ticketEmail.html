@@ -406,6 +406,14 @@
                         </div>
                         {{/unless}}{{/unless}}
                     </div>
+
+                    <!-- QR Code -->
+                    {{#if qrCode}}
+                    <div class="qr-code">
+                        <img src="data:image/png;base64,{{qrCode}}" alt="QR Code" />
+                        <p>Quét mã QR để kiểm soát vé</p>
+                    </div>
+                    {{/if}}
                 </div>
                 {{/each}}
             </div>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thông báo hoãn sự kiện</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f7fb; color: #333; }
+    .container { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #5669FF, #7C8CFF); color: #fff; padding: 22px 24px; text-align: center; }
+    .content { padding: 24px; line-height: 1.6; }
+    .title { font-size: 20px; margin: 0 0 10px; }
+    .event { font-weight: 700; color: #5669FF; }
+    .reason { background: #FFF5F5; border: 1px solid #FFE0E0; padding: 12px; border-radius: 8px; color: #B22222; }
+    .footer { padding: 16px 24px; font-size: 12px; color: #777; text-align: center; border-top: 1px solid #eee; }
+    .info { margin-top: 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Thông báo hoãn sự kiện</h2>
+    </div>
+    <div class="content">
+      <p>Chào bạn,</p>
+      <p>Rất tiếc phải thông báo rằng sự kiện <span class="event">{{eventName}}</span> đã được tạm hoãn.</p>
+      <div class="reason">
+        Lý do: {{reason}}
+      </div>
+      {{#if timeStart}}
+      <p class="info">Thời gian dự kiến: từ {{timeStart}} đến {{timeEnd}}</p>
+      {{/if}}
+      <p class="info">Chúng tôi sẽ sớm cập nhật lịch tổ chức mới. Mọi thắc mắc, vui lòng liên hệ: {{contact}}</p>
+      <p>Cảm ơn bạn đã thông cảm và đồng hành cùng EventSphere.</p>
+    </div>
+    <div class="footer">
+      © EventSphere. Vui lòng không trả lời email này.
+    </div>
+  </div>
+</body>
+</html>
