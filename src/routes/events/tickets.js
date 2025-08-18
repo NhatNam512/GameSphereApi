@@ -541,6 +541,7 @@ router.get('/grouped/:userId', async function (req, res) {
            showtimeId: ticket.showtimeId?._id || null,
            showtimeStart: ticket.showtimeId?.startTime || null,
            showtimeEnd: ticket.showtimeId?.endTime || null,
+           approvalStatus: ticket.eventId?.approvalStatus || null,
            orderId: ticket.orderId?._id,
            orderTotalPrice: ticket.orderId?.totalPrice || 0,
            orderStatus: ticket.orderId?.status,
@@ -573,6 +574,7 @@ router.get('/grouped/:userId', async function (req, res) {
       eventName: group.eventName,
       eventAvatar: group.eventAvatar,
       eventLocation: group.eventLocation,
+      approvalStatus: group.approvalStatus,
       showtime: group.showtimeId ? {
         id: group.showtimeId,
         startTime: group.showtimeStart,
