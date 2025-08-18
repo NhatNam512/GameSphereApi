@@ -92,7 +92,7 @@ exports.getRecommendedEvents = async (req, res) => {
   const userId = req.user.id;
   const limit = 10; // Cố định lấy 10 sự kiện
   const cacheKey = `recommend:${userId}:v2`;
-  const now = new Date();
+  const now = Date.now();
   const startTime = Date.now();
 
   try {
@@ -111,12 +111,9 @@ exports.getRecommendedEvents = async (req, res) => {
 
     // 3. Lấy tất cả sự kiện sắp diễn ra (chỉ lấy sự kiện đã duyệt hoặc chưa có trạng thái)
     const events = await Event.find({
-      timeStart: { $gt: now }, // Chỉ lấy sự kiện chưa diễn ra
-      $or: [
-        { approvalStatus: 'approved' },
-        { approvalStatus: null },
-        { approvalStatus: { $exists: false } }
-      ]
+      // Lấy sự kiện đang diễn ra hoặc chưa diễn ra: timeEnd > hiện tại
+      timeEnd: { $gt: now },
+      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }
     })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
       .lean();
@@ -187,7 +184,7 @@ exports.getRecommendedEvents = async (req, res) => {
     await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);
     
     console.log(`[Recommend] user=${userId} time=${Date.now() - startTime}ms source=tag-based events=${recommended.length}`);
-    return res.json({ status: 200, data: response });
+    return res.json({ status: 200, response });
 
   } catch (err) {
     console.error('Error in getRecommendedEvents:', err);

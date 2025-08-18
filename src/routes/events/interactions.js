@@ -5,6 +5,6 @@ const router = express.Router();
 
 router.post('/addInteraction', authenticate, createInteraction);
 
-router.get('/topViewed', authenticate, getEventTotalScores);
+router.get('/topViewed', getEventTotalScores);
 
 module.exports = router;

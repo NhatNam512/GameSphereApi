@@ -151,6 +151,7 @@ router.get("/home", async function (req, res) {
     const events = await eventModel.find({ 
       approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }
     })
+      .sort({ createdAt: -1 })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
       .populate("userId", "username picUrl")
       .populate("tags", "name")

@@ -39,8 +39,8 @@ exports.getUserOrderHistory = async (req, res) => {
     
     // Get orders with pagination
     const orders = await Order.find(query)
-      .populate('eventId', 'name location timeStart timeEnd image')
-      .populate('userId', 'username email phone fullName avatar')
+      .populate('eventId', 'name location timeStart timeEnd avatar')
+      .populate('userId', 'username email phone fullname picUrl')
       .sort({ createdAt: -1 }) // Sắp xếp theo thời gian tạo đơn hàng mới nhất lên đầu
       .skip(skip)
       .limit(parseInt(limit))
@@ -103,9 +103,9 @@ exports.getOrderDetail = async (req, res) => {
 
     // Get order with full details
     const order = await Order.findById(orderId)
-      .populate('eventId', 'name location timeStart timeEnd image description')
-      .populate('userId', 'username email phone fullName avatar')
-      .populate('giftRecipientUserId', 'username email fullName avatar')
+      .populate('eventId', 'name location timeStart timeEnd avatar description')
+      .populate('userId', 'username email phone fullname picUrl')
+      .populate('giftRecipientUserId', 'username email fullname picUrl')
       .lean();
 
     if (!order) {
