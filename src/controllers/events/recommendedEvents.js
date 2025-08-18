@@ -184,7 +184,7 @@ exports.getRecommendedEvents = async (req, res) => {
     await redis.set(cacheKey, JSON.stringify(response), 'EX', 60 * 5);
     
     console.log(`[Recommend] user=${userId} time=${Date.now() - startTime}ms source=tag-based events=${recommended.length}`);
-    return res.json(JSON.stringify(response));
+    return res.json(response);
 
   } catch (err) {
     console.error('Error in getRecommendedEvents:', err);
