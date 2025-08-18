@@ -149,7 +149,7 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find({ 
-      approvalStatus: { $nin: ['pending', 'rejected'] }
+      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }
     })
       .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
       .populate("userId", "username picUrl")
@@ -402,7 +402,7 @@ router.get("/categories/:id", async function (req,  res) {
     const {id} = req.params;
     var categories = await eventModel.find({
       categories: id, 
-      approvalStatus: { $nin: ['pending', 'rejected'] }
+      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }
     });
     if(categories.length>0){
       res.status(200).json({
@@ -630,21 +630,50 @@ router.put("/edit", async function (req, res, next) {
 
     await itemUpdate.save({ session });
 
-    // Handle showtimes updates
-    // Delete existing showtimes for this event
-    await showtimeModel.deleteMany({ eventId: id }).session(session);
-    // Create new showtimes
+    // Handle showtimes updates - Smart update thay vì delete + create
     const createdShowtimes = [];
     if (Array.isArray(showtimes)) {
+      // Lấy showtimes hiện tại
+      const existingShowtimes = await showtimeModel.find({ eventId: id }).session(session);
+      const existingMap = new Map(existingShowtimes.map(st => [st.startTime, st]));
+      
+      // Xử lý từng showtime mới
       for (const st of showtimes) {
-        const [newShowtime] = await showtimeModel.create([{
-          eventId: id,
-          startTime: st.startTime,
-          endTime: st.endTime,
-          ticketPrice: st.ticketPrice,
-          ticketQuantity: st.ticketQuantity
-        }], { session });
-        createdShowtimes.push(newShowtime);
+        if (existingMap.has(st.startTime)) {
+          // Update showtime hiện tại
+          const existing = existingMap.get(st.startTime);
+          await showtimeModel.updateOne(
+            { _id: existing._id },
+            {
+              $set: {
+                endTime: st.endTime,
+                ticketPrice: st.ticketPrice,
+                ticketQuantity: st.ticketQuantity
+              }
+            },
+            { session }
+          );
+          createdShowtimes.push(existing);
+        } else {
+          // Tạo showtime mới
+          const [newShowtime] = await showtimeModel.create([{
+            eventId: id,
+            startTime: st.startTime,
+            endTime: st.endTime,
+            ticketPrice: st.ticketPrice,
+            ticketQuantity: st.ticketQuantity
+          }], { session });
+          createdShowtimes.push(newShowtime);
+        }
+      }
+      
+      // Xóa showtimes không còn trong danh sách mới
+      const newStartTimes = new Set(showtimes.map(st => st.startTime));
+      const toDelete = existingShowtimes.filter(st => !newStartTimes.has(st.startTime));
+      if (toDelete.length > 0) {
+        await showtimeModel.deleteMany({
+          _id: { $in: toDelete.map(st => st._id) }
+        }).session(session);
       }
     }
 
@@ -660,47 +689,144 @@ router.put("/edit", async function (req, res, next) {
 
     // Handle zones based on new typeBase
     if (typeBase === 'zone' && Array.isArray(zones)) {
-      await zoneTicketModel.deleteMany({ eventId: id }).session(session);
+      // Smart update zone tickets thay vì delete + create
+      const existingZoneTickets = await zoneTicketModel.find({ eventId: id }).session(session);
+      const existingZoneMap = new Map(existingZoneTickets.map(zt => [`${zt.showtimeId}-${zt.name}`, zt]));
+      
       for (const zone of zones) {
         if (createdShowtimes.length > 0) {
-          for (const newShowtime of createdShowtimes) {
-            await zoneTicketModel.create([
-              {
-                showtimeId: newShowtime._id,
-                name: zone.name,
-                totalTicketCount: zone.totalTicketCount,
-                price: zone.price,
-                eventId: id
-              }
-            ], { session });
+          for (const showtime of createdShowtimes) {
+            const key = `${showtime._id}-${zone.name}`;
+            if (existingZoneMap.has(key)) {
+              // Update zone ticket hiện tại
+              const existing = existingZoneMap.get(key);
+              await zoneTicketModel.updateOne(
+                { _id: existing._id },
+                {
+                  $set: {
+                    totalTicketCount: zone.totalTicketCount,
+                    price: zone.price
+                  }
+                },
+                { session }
+              );
+            } else {
+              // Tạo zone ticket mới
+              await zoneTicketModel.create([
+                {
+                  showtimeId: showtime._id,
+                  name: zone.name,
+                  totalTicketCount: zone.totalTicketCount,
+                  price: zone.price,
+                  eventId: id
+                }
+              ], { session });
+            }
           }
         }
+      }
+      
+      // Xóa zone tickets không còn trong danh sách mới
+      const newZoneKeys = new Set();
+      zones.forEach(zone => {
+        createdShowtimes.forEach(showtime => {
+          newZoneKeys.add(`${showtime._id}-${zone.name}`);
+        });
+      });
+      
+      const toDelete = existingZoneTickets.filter(zt => !newZoneKeys.has(`${zt.showtimeId}-${zt.name}`));
+      if (toDelete.length > 0) {
+        await zoneTicketModel.deleteMany({
+          _id: { $in: toDelete.map(zt => zt._id) }
+        }).session(session);
       }
     }
 
     if (typeBase === 'seat' && Array.isArray(zones)) {
-      await zoneModel.deleteMany({ eventId: id }).session(session); // Clear old zones for seat type
-      await zoneTicketModel.deleteMany({ eventId: id }).session(session); // Clear old seat tickets for seat type
+      // Smart update zones và seat tickets thay vì delete + create
+      const existingZones = await zoneModel.find({ eventId: id }).session(session);
+      const existingZoneMap = new Map(existingZones.map(z => [z.name, z]));
+      
       for (const zone of zones) {
-        const [newZone] = await zoneModel.create([
-          {
-            name: zone.name,
-            layout: zone.layout,
-            eventId: id
-          }
-        ], { session });
-        if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
-          for (const newShowtime of createdShowtimes) {
-            const seatTickets = zone.layout.seats.map(seat => ({
-              showtimeId: newShowtime._id,
-              name: `${zone.name} - ${seat.label}`,
-              totalTicketCount: 1,
-              price: seat.price
-            }));
-            if (seatTickets.length > 0) {
-              await zoneTicketModel.insertMany(seatTickets, { session });
+        if (existingZoneMap.has(zone.name)) {
+          // Update zone hiện tại
+          const existingZone = existingZoneMap.get(zone.name);
+          await zoneModel.updateOne(
+            { _id: existingZone._id },
+            { $set: { layout: zone.layout } },
+            { session }
+          );
+          
+          // Update seat tickets cho zone này
+          if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
+            const existingSeatTickets = await zoneTicketModel.find({
+              eventId: id,
+              name: { $regex: `^${zone.name} - ` }
+            }).session(session);
+            
+            // Xóa seat tickets cũ của zone này
+            if (existingSeatTickets.length > 0) {
+              await zoneTicketModel.deleteMany({
+                _id: { $in: existingSeatTickets.map(st => st._id) }
+              }).session(session);
+            }
+            
+            // Tạo seat tickets mới
+            for (const showtime of createdShowtimes) {
+              const seatTickets = zone.layout.seats.map(seat => ({
+                showtimeId: showtime._id,
+                name: `${zone.name} - ${seat.label}`,
+                totalTicketCount: 1,
+                price: seat.price,
+                eventId: id
+              }));
+              if (seatTickets.length > 0) {
+                await zoneTicketModel.insertMany(seatTickets, { session });
+              }
             }
           }
+        } else {
+          // Tạo zone mới
+          const [newZone] = await zoneModel.create([
+            {
+              name: zone.name,
+              layout: zone.layout,
+              eventId: id
+            }
+          ], { session });
+          
+          // Tạo seat tickets cho zone mới
+          if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
+            for (const showtime of createdShowtimes) {
+              const seatTickets = zone.layout.seats.map(seat => ({
+                showtimeId: showtime._id,
+                name: `${zone.name} - ${seat.label}`,
+                totalTicketCount: 1,
+                price: seat.price,
+                eventId: id
+              }));
+              if (seatTickets.length > 0) {
+                await zoneTicketModel.insertMany(seatTickets, { session });
+              }
+            }
+          }
+        }
+      }
+      
+      // Xóa zones không còn trong danh sách mới
+      const newZoneNames = new Set(zones.map(z => z.name));
+      const zonesToDelete = existingZones.filter(z => !newZoneNames.has(z.name));
+      if (zonesToDelete.length > 0) {
+        await zoneModel.deleteMany({
+          _id: { $in: zonesToDelete.map(z => z._id) }
+        }).session(session);
+        
+        // Xóa seat tickets của zones bị xóa
+        for (const zoneToDelete of zonesToDelete) {
+          await zoneTicketModel.deleteMany({
+            eventId: id,
+            name: { $regex: `^${zoneToDelete.name} - ` }
+          }).session(session);
         }
       }
     }
@@ -735,7 +861,7 @@ router.get("/search", async function (req, res) {
     const skip = (Number(page) - 1) * Number(limit);
 
     const matchCondition = {
-      approvalStatus: { $nin: ['pending', 'rejected'] }, // Loại trừ pending và rejected
+      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }, // Loại trừ pending, rejected và postponed
       $or: [
         { name: { $regex: query, $options: "i" } },
       ],
@@ -814,8 +940,8 @@ router.post("/sort", async function (req, res) {
     const { categories, ticketPrice, timeStart } = req.body;
     const filter = {};
 
-    // Luôn loại trừ sự kiện pending và rejected
-    filter.approvalStatus = { $nin: ['pending', 'rejected'] };
+    // Luôn loại trừ sự kiện pending, rejected và postponed
+    filter.approvalStatus = { $nin: ['pending', 'rejected', 'postponed'] };
 
     // Thêm điều kiện lọc cho categories nếu có
     if (categories) {
@@ -897,10 +1023,10 @@ router.put('/approve/:eventId', async function (req, res) {
       });
     }
 
-    if (!['approved', 'rejected'].includes(approvalStatus)) {
+    if (!['approved', 'rejected', 'postponed'].includes(approvalStatus)) {
       return res.status(400).json({ 
         status: false, 
-        message: `approvalStatus phải là 'approved' hoặc 'rejected', nhận được: '${approvalStatus}'`
+        message: `approvalStatus phải là 'approved', 'rejected' hoặc 'postponed', nhận được: '${approvalStatus}'`
       });
     }
 
@@ -1048,6 +1174,145 @@ router.get('/pending-approval', async function (req, res) {
 
   } catch (error) {
     console.error("❌ Error getting pending events:", error);
+    return res.status(500).json({ 
+      status: false, 
+      message: "Lỗi hệ thống", 
+      error: error.message 
+    });
+  }
+});
+
+// API hoãn sự kiện
+router.put('/postpone/:eventId', async function (req, res) {
+  try {
+    const { eventId } = req.params;
+    const { reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ 
+        status: false, 
+        message: "eventId không hợp lệ" 
+      });
+    }
+
+    const event = await eventModel.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ 
+        status: false, 
+        message: "Không tìm thấy sự kiện" 
+      });
+    }
+
+    // Chỉ cho phép hoãn sự kiện đã approved
+    if (event.approvalStatus !== 'approved') {
+      return res.status(400).json({ 
+        status: false, 
+        message: "Chỉ có thể hoãn sự kiện đã được duyệt" 
+      });
+    }
+
+    // Cập nhật status thành postponed
+    event.approvalStatus = 'postponed';
+    event.approvalReason = reason || 'Sự kiện đã được hoãn';
+    await event.save();
+
+    // Xóa cache
+    await redis.del("events_home");
+    await redis.del(`events_detail_${eventId}`);
+    await redis.del(`getEvents:${event.userId}`);
+
+    // Thông báo qua socket
+    const socketMessage = {
+      type: 'EVENT_POSTPONED',
+      eventId: event._id,
+      eventName: event.name,
+      reason: reason || 'Sự kiện đã được hoãn',
+      organizerId: event.userId,
+      timestamp: new Date()
+    };
+    await pub.publish("event_updates", JSON.stringify(socketMessage));
+
+    return res.status(200).json({
+      status: true,
+      message: "Hoãn sự kiện thành công",
+      data: {
+        eventId: event._id,
+        eventName: event.name,
+        status: event.approvalStatus,
+        reason: event.approvalReason
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error postponing event:", error);
+    return res.status(500).json({ 
+      status: false, 
+      message: "Lỗi hệ thống", 
+      error: error.message 
+    });
+  }
+});
+
+// API hủy hoãn sự kiện (chuyển về approved)
+router.put('/unpostpone/:eventId', async function (req, res) {
+  try {
+    const { eventId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ 
+        status: false, 
+        message: "eventId không hợp lệ" 
+      });
+    }
+
+    const event = await eventModel.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ 
+        status: false, 
+        message: "Không tìm thấy sự kiện" 
+      });
+    }
+
+    // Chỉ cho phép hủy hoãn sự kiện đang postponed
+    if (event.approvalStatus !== 'postponed') {
+      return res.status(400).json({ 
+        status: false, 
+        message: "Chỉ có thể hủy hoãn sự kiện đang bị hoãn" 
+      });
+    }
+
+    // Chuyển về approved
+    event.approvalStatus = 'approved';
+    event.approvalReason = '';
+    await event.save();
+
+    // Xóa cache
+    await redis.del("events_home");
+    await redis.del(`events_detail_${eventId}`);
+    await redis.del(`getEvents:${event.userId}`);
+
+    // Thông báo qua socket
+    const socketMessage = {
+      type: 'EVENT_UNPOSTPONED',
+      eventId: event._id,
+      eventName: event.name,
+      organizerId: event.userId,
+      timestamp: new Date()
+    };
+    await pub.publish("event_updates", JSON.stringify(socketMessage));
+
+    return res.status(200).json({
+      status: true,
+      message: "Hủy hoãn sự kiện thành công",
+      data: {
+        eventId: event._id,
+        eventName: event.name,
+        status: event.approvalStatus
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error unpostponing event:", error);
     return res.status(500).json({ 
       status: false, 
       message: "Lỗi hệ thống", 

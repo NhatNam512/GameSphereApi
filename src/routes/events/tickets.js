@@ -490,8 +490,8 @@ router.get('/grouped/:userId', async function (req, res) {
     
     // Lấy tất cả vé của user với thông tin cần thiết
     const tickets = await Ticket.find({ userId })
-      .select('_id ticketId eventId showtimeId orderId price status createdAt')
-      .populate('eventId', '_id name avatar location timeStart timeEnd')
+      .select('_id ticketId eventId showtimeId orderId price status createdAt ')
+      .populate('eventId', '_id name avatar location timeStart timeEnd approvalStatus')
       .populate('showtimeId', '_id startTime endTime')
       .populate('orderId', '_id totalPrice status createdAt')
       .lean();
