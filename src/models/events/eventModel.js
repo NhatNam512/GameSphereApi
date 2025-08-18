@@ -17,7 +17,7 @@ const events = new schema({
     status: { type: String },
     approvalStatus: { 
         type: String, 
-        enum: ['pending', 'approved', 'rejected'], 
+        enum: ['pending', 'approved', 'rejected', 'postponed'], 
         default: 'pending' 
     },
     approvalReason: { 

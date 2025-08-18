@@ -1183,7 +1183,7 @@ router.get('/pending-approval', async function (req, res) {
 });
 
 // API hoãn sự kiện
-router.put('/postpone/:eventId', async function (req, res) {
+router.put('/postpone/:eventId',authenticate ,async function (req, res) {
   try {
     const { eventId } = req.params;
     const { reason } = req.body;
