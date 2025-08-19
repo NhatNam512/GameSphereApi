@@ -42,8 +42,11 @@ router.get("/getTicket/:userId", async function (req, res) {
             .populate('showtimeId', '_id startTime endTime') // Populate showtime details
             .lean();
         if(!tickets) return res.status(404).json({error: "Not Found Ticket"});
-        //Lấy danh sách eventId duy nhất
-        const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
+        //Lấy danh sách eventId duy nhất (chỉ lấy những ticket có eventId)
+        const eventIds = [...new Set(tickets
+            .filter(t => t.eventId)
+            .map(t => t.eventId.toString())
+        )];
         //Lấy thông tin sự kiện 
         const events = await Event.find({_id: {$in: eventIds}})
             .select('_id name avatar location typeBase')
@@ -60,7 +63,7 @@ router.get("/getTicket/:userId", async function (req, res) {
                 address: user.address
             },
             events: events.map(event => {
-                const filteredTickets = tickets.filter(t => t.eventId.toString() === event._id.toString());
+                const filteredTickets = tickets.filter(t => t.eventId && t.eventId.toString() === event._id.toString());
                 return {
                     _id: event._id,
                     name: event.name,
@@ -279,23 +282,26 @@ router.get('/user/:userId/events', async function (req, res) {
       return res.status(200).json({ status: true, message: 'Người dùng chưa mua vé sự kiện nào', data: [] });
     }
     
-    // Lấy danh sách eventId duy nhất
-    const eventIds = [...new Set(tickets.map(t => t.eventId.toString()))];
+    // Lấy danh sách eventId duy nhất (chỉ lấy những ticket có eventId)
+    const eventIds = [...new Set(tickets
+      .filter(t => t.eventId && t.eventId._id)
+      .map(t => t.eventId._id.toString())
+    )];
     
-         // Lấy thông tin sự kiện (đã có từ populate ở trên)
-     const events = eventIds.map(eventId => {
-       const eventTickets = tickets.filter(t => t.eventId._id.toString() === eventId);
-       return eventTickets[0]?.eventId;
-     }).filter(Boolean);
+    // Lấy thông tin sự kiện (đã có từ populate ở trên)
+    const events = eventIds.map(eventId => {
+      const eventTickets = tickets.filter(t => t.eventId && t.eventId._id && t.eventId._id.toString() === eventId);
+      return eventTickets[0]?.eventId;
+    }).filter(Boolean);
     
-         // Nhóm vé theo event và showtime
-     const eventsWithTickets = events.map(event => {
-       const eventTickets = tickets.filter(t => t.eventId._id.toString() === event._id.toString());
+    // Nhóm vé theo event và showtime
+    const eventsWithTickets = events.map(event => {
+      const eventTickets = tickets.filter(t => t.eventId && t.eventId._id && t.eventId._id.toString() === event._id.toString());
       
       // Nhóm vé theo showtime
       const ticketsByShowtime = {};
       eventTickets.forEach(ticket => {
-        const showtimeKey = ticket.showtimeId ? ticket.showtimeId._id.toString() : 'no-showtime';
+        const showtimeKey = ticket.showtimeId && ticket.showtimeId._id ? ticket.showtimeId._id.toString() : 'no-showtime';
         
         if (!ticketsByShowtime[showtimeKey]) {
           ticketsByShowtime[showtimeKey] = {
@@ -651,7 +657,10 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
     }
 
     // Lấy thông tin zone (cho vé ghế) - lấy tất cả zones của event để tìm seat
-    const eventIds = [...new Set(tickets.map(t => t.eventId._id.toString()))];
+    const eventIds = [...new Set(tickets
+        .filter(t => t.eventId && t.eventId._id)
+        .map(t => t.eventId._id.toString())
+    )];
     let eventZonesMap = {};
     
     for (const eventId of eventIds) {
@@ -720,7 +729,7 @@ router.get('/details/:userId/:eventId/:showtimeId?', async function (req, res) {
           seatId = ticket.seat.seatId;
           
           // Tìm zone chứa seat này
-          const eventId = ticket.eventId._id.toString();
+          const eventId = ticket.eventId && ticket.eventId._id ? ticket.eventId._id.toString() : null;
           const zones = eventZonesMap[eventId] || [];
           
                      for (const zone of zones) {
