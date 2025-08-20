@@ -14,6 +14,7 @@ const ZoneTicket = require("../../models/events/zoneTicketModel");
 const { sendNotificationCore } = require("../auth/sendNotification");
 const showtimeModel = require("../../models/events/showtimeModel");
 const { sendTicketEmail } = require('../../services/mailService');
+const { getSocketIO } = require("../../../socket/socket");
 
 exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -391,7 +392,30 @@ exports.createTicket = async (req, res) => {
             console.warn(`⚠️ Lỗi xóa cache seats:`, redisError.message);
         }
         
+        // Xóa cache getZone cho showtime này
+        try {
+            await redisClient.del(`seatStatus:${order.eventId}:${order.showtimeId}`);
+            console.log(`✅ Đã xóa cache getZone: seatStatus:${order.eventId}:${order.showtimeId}`);
+        } catch (redisError) {
+            console.warn(`⚠️ Lỗi xóa cache getZone:`, redisError.message);
+        }
+        
         await session.commitTransaction();
+        
+        // Emit socket event để thông báo cho tất cả user trong showtime này
+        try {
+            const io = getSocketIO();
+            if (io) {
+                io.to(`event_${order.eventId}_showtime_${order.showtimeId}`).emit('zone_data_changed', { 
+                    eventId: order.eventId, 
+                    showtimeId: order.showtimeId,
+                    message: 'Có vé mới được tạo, vui lòng cập nhật trạng thái ghế'
+                });
+                console.log(`✅ Đã emit socket event zone_data_changed cho event ${order.eventId} showtime ${order.showtimeId}`);
+            }
+        } catch (socketError) {
+            console.warn(`⚠️ Lỗi emit socket event:`, socketError.message);
+        }
         
         // Gửi email vé (không cần chờ để không ảnh hưởng response time)
         setTimeout(async () => {

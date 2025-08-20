@@ -29,6 +29,45 @@ async function sendTicketEmail(ticketData) {
     const templatePath = path.join(__dirname, '../templates/ticketEmail.html');
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     
+    // Helper function để format thời gian đầy đủ
+    handlebars.registerHelper('formatDateTime', function(timestamp) {
+      if (!timestamp) return '';
+      const date = new Date(timestamp);
+      return date.toLocaleString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    });
+    
+    // Helper function để format thời gian ngắn gọn (chỉ giờ:phút)
+    handlebars.registerHelper('formatTime', function(timestamp) {
+      if (!timestamp) return '';
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    });
+    
+    // Helper function để tính thời lượng sự kiện
+    handlebars.registerHelper('formatDuration', function(startTime, endTime) {
+      if (!startTime || !endTime) return '';
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      const durationMs = end - start;
+      const hours = Math.floor(durationMs / (1000 * 60 * 60));
+      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hours > 0) {
+        return `${hours} giờ ${minutes} phút`;
+      } else {
+        return `${minutes} phút`;
+      }
+    });
+    
     // Compile template với Handlebars
     const template = handlebars.compile(templateSource);
     
@@ -55,17 +94,33 @@ async function sendTicketEmail(ticketData) {
         hour: '2-digit',
         minute: '2-digit'
       }),
+      showtimeStart: new Date(ticketData.showtime.startTime).toLocaleString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      showtimeEnd: new Date(ticketData.showtime.endTime).toLocaleString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      showtime: ticketData.showtime, // Truyền dữ liệu showtime gốc để sử dụng helper
       eventLocation: ticketData.event.location,
       bookingType: ticketData.order.bookingType === 'none' ? 'Vé thường' : 
                    ticketData.order.bookingType === 'seat' ? 'Vé theo ghế' : 'Vé theo khu vực',
-      tickets: ticketData.tickets.map(ticket => ({
-        ticketId: ticket.ticketId,
-        ticketNumber: ticket.ticketNumber,
-        status: ticket.status === 'issued' ? 'Đã phát hành' : ticket.status,
-        qrCode: ticket.qrCode,
-        seat: ticket.seat,
-        zone: ticket.zone
-      })),
+             tickets: ticketData.tickets.map(ticket => ({
+         ticketId: ticket.ticketId,
+         ticketNumber: ticket.ticketNumber,
+         status: ticket.status === 'issued' ? 'Đã phát hành' : ticket.status,
+         qrCode: ticket.qrCode,
+         seat: ticket.seat,
+         zone: ticket.zone,
+         totalPrice: ticket.totalPrice.toLocaleString('vi-VN')
+       })),
       // Gift fields
       isGift: ticketData.isGift || false,
       giverName: ticketData.giver ? (ticketData.giver.fullName || ticketData.giver.email) : null,

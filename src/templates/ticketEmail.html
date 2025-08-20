@@ -70,8 +70,8 @@
         .info-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
-            padding: 8px 0;
+            margin-bottom: 15px;
+            padding: 12px 0;
             border-bottom: 1px solid #e9ecef;
         }
         
@@ -82,11 +82,14 @@
         .info-label {
             font-weight: 600;
             color: #495057;
+            min-width: 120px;
+            margin-right: 15px;
         }
         
         .info-value {
             color: #212529;
             text-align: right;
+            flex: 1;
         }
         
         .event-details {
@@ -189,20 +192,24 @@
         .qr-code {
             text-align: center;
             margin: 20px 0;
-            padding: 20px;
+            padding: 25px;
             background-color: white;
-            border-radius: 10px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
         
         .qr-code img {
-            max-width: 150px;
+            max-width: 180px;
             height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .qr-code p {
-            margin-top: 10px;
+            margin-top: 15px;
             font-size: 14px;
             color: #666;
+            font-weight: 500;
         }
         
         .important-notes {
@@ -278,11 +285,27 @@
             
             .info-row {
                 flex-direction: column;
-                gap: 5px;
+                gap: 8px;
+                align-items: flex-start;
+            }
+            
+            .info-label {
+                min-width: auto;
+                margin-right: 0;
+                margin-bottom: 5px;
             }
             
             .info-value {
                 text-align: left;
+                width: 100%;
+            }
+            
+            .qr-code img {
+                max-width: 150px;
+            }
+            
+            .ticket-card {
+                padding: 15px;
             }
         }
     </style>
@@ -356,7 +379,15 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label">⏰ Thời gian: </span>
-                        <span class="info-value">{{showtime}}</span>
+                        <span class="info-value">{{formatTime showtime.startTime}} - {{formatTime showtime.endTime}}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">📅 Ngày chiếu: </span>
+                        <span class="info-value">{{formatDateTime showtime.startTime}}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">⏱️ Thời lượng: </span>
+                        <span class="info-value">{{formatDuration showtime.startTime showtime.endTime}}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">📍 Địa điểm: </span>
@@ -383,35 +414,45 @@
                     <div class="ticket-details">
                         {{#if seat}}
                         <div class="ticket-detail">
-                            <div class="ticket-detail-label">Ghế</div>
+                            <div class="ticket-detail-label">🎫 Ghế</div>
                             <div class="ticket-detail-value">{{seat.seatId}}</div>
                         </div>
                         {{/if}}
                         
                         {{#if zone}}
                         <div class="ticket-detail">
-                            <div class="ticket-detail-label">Khu vực</div>
+                            <div class="ticket-detail-label">🏷️ Khu vực</div>
                             <div class="ticket-detail-value">{{zone.zoneName}}</div>
                         </div>
                         {{/if}}
                         
                         {{#unless seat}}{{#unless zone}}
                         <div class="ticket-detail">
-                            <div class="ticket-detail-label">Loại vé</div>
+                            <div class="ticket-detail-label">🎫 Loại vé</div>
                             <div class="ticket-detail-value">Vé thường</div>
                         </div>
                         <div class="ticket-detail">
-                            <div class="ticket-detail-label">Số thứ tự</div>
+                            <div class="ticket-detail-label">🔢 Số thứ tự</div>
                             <div class="ticket-detail-value">#{{ticketNumber}}</div>
                         </div>
                         {{/unless}}{{/unless}}
+                        
+                        <div class="ticket-detail">
+                            <div class="ticket-detail-label">💰 Giá vé</div>
+                            <div class="ticket-detail-value">{{totalPrice}} VNĐ</div>
+                        </div>
                     </div>
 
                     <!-- QR Code -->
                     {{#if qrCode}}
                     <div class="qr-code">
-                        <img src="data:image/png;base64,{{qrCode}}" alt="QR Code" />
-                        <p>Quét mã QR để kiểm soát vé</p>
+                        <img src="data:image/png;base64,{{qrCode}}" alt="QR Code cho vé {{ticketId}}" />
+                        <p>📱 Quét mã QR này tại cổng vào để kiểm soát vé</p>
+                    </div>
+                    {{else}}
+                    <div class="qr-code" style="background-color: #f8f9fa; border: 2px dashed #dee2e6;">
+                        <p style="color: #6c757d; font-size: 16px;">🔄 QR Code đang được tạo...</p>
+                        <p style="color: #6c757d; font-size: 14px; margin-top: 10px;">Vui lòng chờ trong giây lát</p>
                     </div>
                     {{/if}}
                 </div>

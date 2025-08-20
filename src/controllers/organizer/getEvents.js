@@ -61,6 +61,90 @@ function calculateRevenueByShowtime(event, showtimes, ordersByShowtime) {
   });
 }
 
+// Hàm tính toán số lượng vé đã bán theo từng loại cho mỗi showtime
+async function calculateTicketSalesByType(event, showtime, zones, tickets, orders) {
+	const showtimeId = showtime._id.toString();
+	const showtimeTickets = tickets.filter(t => t.showtimeId?.toString() === showtimeId);
+	const showtimeOrders = orders.filter(o => o.showtimeId?.toString() === showtimeId);
+	
+	const result = {
+		totalSold: 0,
+		byType: { none: 0, seat: 0, zone: 0 }
+	};
+
+	// Đếm theo loại booking (none, seat, zone)
+	showtimeOrders.forEach(order => {
+		if (order.bookingType === 'none') result.byType.none += order.amount || 0;
+		else if (order.bookingType === 'seat') result.byType.seat += order.amount || 0;
+		else if (order.bookingType === 'zone') result.byType.zone += order.amount || 0;
+		result.totalSold += order.amount || 0;
+	});
+
+	// Trường hợp event theo zone: trả về mảng zones, không bao bọc theo zoneId
+	if (event.typeBase === 'zone') {
+		const zoneTickets = zones.filter(z => z.showtimeId?.toString() === showtimeId);
+		const zonesArray = zoneTickets.map(z => {
+			const zoneId = z._id.toString();
+			const sold = showtimeTickets.filter(t => t.zone && t.zone.zoneId?.toString() === zoneId).length;
+			const total = z.totalTicketCount || 0;
+			return {
+				zoneId,
+				zoneName: z.name || `Zone ${zoneId.slice(-4)}`,
+				totalTickets: total,
+				soldTickets: sold,
+				availableTickets: Math.max(0, total - sold),
+				price: z.price || event.ticketPrice || 0
+			};
+		});
+		result.zones = zonesArray;
+	}
+
+	// Trường hợp event theo seat: nhóm theo area (suy ra area từ seatId)
+	if (event.typeBase === 'seat') {
+		const seatZones = zones.filter(z => z.eventId?.toString() === event._id.toString());
+
+		// Map seatId -> area và đồng thời tính tổng số ghế theo area
+		const seatIdToArea = new Map();
+		const areaMap = new Map(); // area -> { area, totalSeats, soldSeats }
+		seatZones.forEach(zone => {
+			const seats = Array.isArray(zone.layout?.seats) ? zone.layout.seats : [];
+			seats
+				.filter(seat => seat.seatId && seat.seatId !== 'none')
+				.forEach(seat => {
+					const areaName = seat.area || 'Khác';
+					seatIdToArea.set(seat.seatId, areaName);
+					if (!areaMap.has(areaName)) {
+						areaMap.set(areaName, { area: areaName, totalSeats: 0, soldSeats: 0 });
+					}
+					areaMap.get(areaName).totalSeats += 1;
+				});
+		});
+
+		// Đếm số ghế đã bán theo area dựa vào seatId trong ticket
+		const countedSeatIds = new Set();
+		showtimeTickets.forEach(t => {
+			const seatId = t.seat?.seatId;
+			if (!seatId || countedSeatIds.has(seatId)) return;
+			const areaName = seatIdToArea.get(seatId) || 'Khác';
+			if (!areaMap.has(areaName)) {
+				areaMap.set(areaName, { area: areaName, totalSeats: 0, soldSeats: 0 });
+			}
+			areaMap.get(areaName).soldSeats += 1;
+			countedSeatIds.add(seatId);
+		});
+
+		result.areas = Array.from(areaMap.values()).map(a => ({
+			area: a.area,
+			totalSeats: a.totalSeats,
+			soldSeats: a.soldSeats,
+			availableSeats: Math.max(0, a.totalSeats - a.soldSeats)
+		}));
+	}
+
+	// Với type 'none' không cần thêm zones/areas
+	return result;
+}
+
 // Helper: Group revenue by day, month, year
 function groupRevenueByDate(orders, type = 'day') {
   // type: 'day' | 'month' | 'year'
@@ -93,7 +177,7 @@ exports.getEvents = async (req, res) => {
       ZoneTicket.find({ eventId: { $in: eventIds } }).lean(),
       seatBookingModel.find({ eventId: { $in: eventIds }, status: 'booked' }).select("eventId showtimeId seats").lean(),
       require('../../models/events/ticketModel').find({ eventId: { $in: eventIds }, status: { $in: ['issued', 'used'] } }).lean(),
-      require('../../models/events/orderModel').find({ eventId: { $in: eventIds }, status: 'paid' }).select('eventId showtimeId totalPrice createdAt').lean(),
+      require('../../models/events/orderModel').find({ eventId: { $in: eventIds }, status: 'paid' }).select('eventId showtimeId totalPrice createdAt amount bookingType').lean(),
     ]);
 
     // 3. Group lại theo eventId/showtimeId
@@ -123,10 +207,22 @@ exports.getEvents = async (req, res) => {
           revenueMap[r.showtimeId?.toString()] = r.revenue;
         });
       }
-      // Gắn revenue vào từng showtime
-      const showtimesWithRevenue = showtimesWithTickets.map(st => ({
-        ...st,
-        revenue: revenueMap[st._id?.toString()] || 0
+      
+      // Tính toán ticket sales theo loại cho từng showtime
+      const showtimesWithDetails = await Promise.all(showtimesWithTickets.map(async (st) => {
+        const ticketSalesByType = await calculateTicketSalesByType(
+          event, 
+          st, 
+          event.typeBase === 'zone' ? allZoneTickets : zones, 
+          allTickets, 
+          allOrders
+        );
+        
+        return {
+          ...st,
+          revenue: revenueMap[st._id?.toString()] || 0,
+          ticketSalesByType
+        };
       }));
 
       // Doanh thu theo ngày, tháng, năm cho từng event
@@ -139,7 +235,7 @@ exports.getEvents = async (req, res) => {
       totalRevenue += eventTotalRevenue;
       return {
         ...event,
-        showtimes: showtimesWithRevenue,
+        showtimes: showtimesWithDetails,
         totalTicketsEvent,
         soldTickets: eventSoldTickets,
         revenueByShowtime,
@@ -195,5 +291,6 @@ const getApprovalStatusText = (status) => {
   };
   return statusMap[status] || 'Không xác định';
 };
+
 
 

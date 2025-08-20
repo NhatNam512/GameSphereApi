@@ -248,14 +248,6 @@ router.get("/detail/:id", authenticateOptional ,async function (req, res, next) 
     const cacheKey = `events_detail_${id}_${currentUserId || 'anonymous'}`;
     const cachedData = await redis.get(cacheKey);
     
-    if (cachedData) {
-      return res.status(200).json({
-        status: true,
-        message: "Lấy chi tiết sự kiện thành công (từ Redis cache)",
-        data: JSON.parse(cachedData)
-      });
-    }
-    
          const detail = await eventModel.findById(id)
        .populate("tags", "name")
        .lean();
