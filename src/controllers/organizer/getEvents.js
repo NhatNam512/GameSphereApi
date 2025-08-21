@@ -231,6 +231,26 @@ exports.getEvents = async (req, res) => {
       const revenueByMonth = groupRevenueByDate(eventOrders, 'month');
       const revenueByYear = groupRevenueByDate(eventOrders, 'year');
 
+      // Ước tính doanh thu (estimatedRevenue) theo cấu hình vé
+      let estimatedRevenue = 0;
+      if (event.typeBase === 'none') {
+        // Tổng theo từng showtime: giá * số lượng vé của showtime
+        estimatedRevenue = showtimes.reduce((sum, st) => sum + (st.ticketPrice || 0) * (st.ticketQuantity || 0), 0);
+      } else if (event.typeBase === 'zone') {
+        // Tổng theo tất cả zoneTickets của event: price * totalTicketCount
+        const eventZoneTickets = (Array.isArray(allZoneTickets) ? allZoneTickets : []).filter(zt => zt.eventId?.toString() === event._id.toString());
+        estimatedRevenue = eventZoneTickets.reduce((sum, zt) => sum + (zt.price || 0) * (zt.totalTicketCount || 0), 0);
+      } else if (event.typeBase === 'seat') {
+        // Cộng giá của toàn bộ ghế có seatId hợp lệ trong các zone của event
+        estimatedRevenue = zones.reduce((sumZone, zone) => {
+          const seats = Array.isArray(zone.layout?.seats) ? zone.layout.seats : [];
+          const zoneSum = seats
+            .filter(seat => seat.seatId && seat.seatId !== 'none')
+            .reduce((s, seat) => s + (seat.price || 0), 0);
+          return sumZone + zoneSum;
+        }, 0);
+      }
+
       totalTicketsSold += eventSoldTickets;
       totalRevenue += eventTotalRevenue;
       return {
@@ -240,6 +260,7 @@ exports.getEvents = async (req, res) => {
         soldTickets: eventSoldTickets,
         revenueByShowtime,
         eventTotalRevenue,
+        estimatedRevenue,
         revenueByDay,
         revenueByMonth,
         revenueByYear,

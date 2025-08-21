@@ -107,12 +107,14 @@ exports.getAllTicketsByEvent = async (req, res) => {
 
 const handleZoneTickets = async (eventId) => {
   const zoneTickets = await ZoneTicket.find({ eventId }).populate('showtimeId');
+  const showtimes = await showtimeModel.find({ eventId });
+  const showtimeMap = new Map(showtimes.map(st => [st._id.toString(), st]));
 
   // Lấy vé đã phát hành từ ticketModel
   const issuedTickets = await ticketModel.find({
     eventId: eventId,
     status: { $in: ['issued', 'used'] }
-  }).populate('userId');
+  }).populate('userId showtimeId');
 
   // Tạo map để đếm vé đã phát hành theo zoneTicket
   const issuedTicketMap = new Map();
@@ -153,6 +155,9 @@ const handleZoneTickets = async (eventId) => {
     ticketId: ticket.ticketId,
     zoneTicketId: ticket.zone?.zoneId,
     zoneName: ticket.zone?.zoneName,
+    showtimeId: ticket.showtimeId?._id || ticket.showtimeId || null,
+    startTime: (ticket.showtimeId && ticket.showtimeId.startTime) ? ticket.showtimeId.startTime : (ticket.showtimeId ? showtimeMap.get(ticket.showtimeId.toString())?.startTime : undefined),
+    endTime: (ticket.showtimeId && ticket.showtimeId.endTime) ? ticket.showtimeId.endTime : (ticket.showtimeId ? showtimeMap.get(ticket.showtimeId.toString())?.endTime : undefined),
     userId: ticket.userId?._id || null,
     userName: ticket.userId?.name || ticket.userId?.email || 'Unknown User',
     status: ticket.status,
@@ -164,6 +169,9 @@ const handleZoneTickets = async (eventId) => {
     soldTickets = soldZoneBookings.map(booking => ({
       bookingId: booking._id,
       ticketId: booking.zoneTicketId,
+      showtimeId: booking.showtimeId || null,
+      startTime: booking.showtimeId ? showtimeMap.get(booking.showtimeId.toString())?.startTime : undefined,
+      endTime: booking.showtimeId ? showtimeMap.get(booking.showtimeId.toString())?.endTime : undefined,
       quantity: booking.quantity,
       userId: booking.userId?._id || null,
       userName: booking.userId?.name || booking.userId?.email || 'Unknown User'
@@ -186,7 +194,7 @@ const handleSeatTickets = async (eventId) => {
   const issuedTickets = await ticketModel.find({
     eventId: eventId,
     status: { $in: ['issued', 'used'] }
-  }).populate('userId');
+  }).populate('userId showtimeId');
 
   // Tạo map để đếm vé đã phát hành theo seat
   const issuedTicketMap = new Map();
@@ -287,6 +295,9 @@ const handleSeatTickets = async (eventId) => {
       ticketId: ticket.ticketId,
       zoneTicketId: zoneId,
       zoneName: zoneName,
+      showtimeId: ticket.showtimeId?._id || ticket.showtimeId || null,
+      startTime: (ticket.showtimeId && ticket.showtimeId.startTime) ? ticket.showtimeId.startTime : (ticket.showtimeId ? showtimes.find(st => st._id.toString() === ticket.showtimeId.toString())?.startTime : undefined),
+      endTime: (ticket.showtimeId && ticket.showtimeId.endTime) ? ticket.showtimeId.endTime : (ticket.showtimeId ? showtimes.find(st => st._id.toString() === ticket.showtimeId.toString())?.endTime : undefined),
       userId: ticket.userId?._id || null,
       userName: ticket.userId?.name || ticket.userId?.email || 'Unknown User',
       status: ticket.status,
@@ -312,6 +323,9 @@ const handleSeatTickets = async (eventId) => {
           ticketId: booking._id, // Using bookingId as ticketId for consistency
           zoneTicketId: seat.zoneId,
           zoneName: zoneName,
+          showtimeId: booking.showtimeId || null,
+          startTime: booking.showtimeId ? showtimes.find(st => st._id.toString() === booking.showtimeId.toString())?.startTime : undefined,
+          endTime: booking.showtimeId ? showtimes.find(st => st._id.toString() === booking.showtimeId.toString())?.endTime : undefined,
           userId: booking.userId?._id || null,
           userName: booking.userId?.name || booking.userId?.email || 'Unknown User',
           status: 'booked',
@@ -331,7 +345,7 @@ const handleNoneTickets = async (eventId) => {
   const issuedTickets = await ticketModel.find({
     eventId: eventId,
     status: { $in: ['issued', 'used'] }
-  }).populate('userId');
+  }).populate('userId showtimeId');
 
   // Tạo map để đếm vé đã phát hành theo showtime
   const issuedTicketMap = new Map();
@@ -363,7 +377,9 @@ const handleNoneTickets = async (eventId) => {
     ticketId: ticket._id,
     zoneTicketId: null, // Not applicable for 'none' type
     zoneName: null, // Not applicable for 'none' type
-    showtimeId: ticket.showtimeId,
+    showtimeId: ticket.showtimeId?._id || ticket.showtimeId || null,
+    startTime: (ticket.showtimeId && ticket.showtimeId.startTime) ? ticket.showtimeId.startTime : (ticket.showtimeId ? showtimes.find(st => st._id.toString() === ticket.showtimeId.toString())?.startTime : undefined),
+    endTime: (ticket.showtimeId && ticket.showtimeId.endTime) ? ticket.showtimeId.endTime : (ticket.showtimeId ? showtimes.find(st => st._id.toString() === ticket.showtimeId.toString())?.endTime : undefined),
     userId: ticket.userId?._id || null,
     userName: ticket.userId?.name || ticket.userId?.email || 'Unknown User',
     status: ticket.status,
