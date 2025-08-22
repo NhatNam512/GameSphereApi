@@ -11,6 +11,7 @@ const order = new schema({
     status: {type: String, enum: ["pending", "paid", "failed", "cancelled"], default: "pending"},
     bookingIds: [{ type: oid }],
     bookingType: {type: String, enum: ["seat", "zone", "none"], default: "none"},
+    paymentMethod: {type: String, enum: ["zalo", "banking"], default: "banking"},
     createdAt: { type: Date, default: Date.now },
     // Thêm các field mới để hỗ trợ quản lý hủy đơn
     cancelledAt: { type: Date },

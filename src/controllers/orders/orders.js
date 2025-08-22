@@ -20,7 +20,7 @@ exports.createOrder = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const { userId, eventId, showtimeId, bookingIds, bookingType, totalPrice, giftRecipientUserId, giftMessage } = req.body;
+        const { userId, eventId, showtimeId, bookingIds, bookingType, totalPrice, giftRecipientUserId, giftMessage, paymentMethod } = req.body;
 
         // Validate bookingType
         const validTypes = ['none', 'seat', 'zone'];
@@ -131,6 +131,7 @@ exports.createOrder = async (req, res) => {
             bookingType,
             totalPrice,
             bookingIds: bookingType === 'none' ? [] : bookingIds,
+            paymentMethod: paymentMethod || 'banking', // Lưu phương thức thanh toán
             // Gift fields
             ...(giftRecipientUserId && {
                 isGift: true,
