@@ -149,10 +149,10 @@ router.get("/home", async function (req, res) {
 
     console.time("🗃️ DB Query");
     const events = await eventModel.find({ 
-      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }
+      approvalStatus: { $nin: ['pending', 'rejected'] }
     })
       .sort({ createdAt: -1 })
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus")
       .populate("userId", "username picUrl")
       .populate("tags", "name")
       .lean();
@@ -395,8 +395,8 @@ router.get("/categories/:id", async function (req,  res) {
     const {id} = req.params;
     var categories = await eventModel.find({
       categories: id, 
-      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }
-    });
+      approvalStatus: { $nin: ['pending', 'rejected'] }
+    }).select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus");
     if(categories.length>0){
       res.status(200).json({
         status: true,
@@ -882,7 +882,7 @@ router.get("/search", async function (req, res) {
     const skip = (Number(page) - 1) * Number(limit);
 
     const matchCondition = {
-      approvalStatus: { $nin: ['pending', 'rejected', 'postponed'] }, // Loại trừ pending, rejected và postponed
+      approvalStatus: { $nin: ['pending', 'rejected'] }, // Loại trừ pending, rejected (bao gồm cả postponed)
       $or: [
         { name: { $regex: query, $options: "i" } },
       ],
@@ -892,7 +892,7 @@ router.get("/search", async function (req, res) {
     const totalEvents = await eventModel.countDocuments(matchCondition);
 
     const events = await eventModel.find(matchCondition)
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags approvalStatus")
       .sort({ timeStart: -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -961,8 +961,8 @@ router.post("/sort", async function (req, res) {
     const { categories, ticketPrice, timeStart } = req.body;
     const filter = {};
 
-    // Luôn loại trừ sự kiện pending, rejected và postponed
-    filter.approvalStatus = { $nin: ['pending', 'rejected', 'postponed'] };
+    // Luôn loại trừ sự kiện pending, rejected (bao gồm cả postponed)
+    filter.approvalStatus = { $nin: ['pending', 'rejected'] };
 
     // Thêm điều kiện lọc cho categories nếu có
     if (categories) {
@@ -979,7 +979,7 @@ router.post("/sort", async function (req, res) {
       filter.timeStart = { $gte: new Date(timeStart) }; // Lọc các sự kiện bắt đầu từ timeStart trở đi
     }
 
-    const events = await eventModel.find(filter);
+    const events = await eventModel.find(filter).select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus");
 
     if (events.length > 0) {
       res.status(200).json({
