@@ -54,11 +54,11 @@ router.delete("/:eventId",  async (req, res) => {
     }
     // Xoá các dữ liệu liên quan
     await Promise.all([
-      showtimeModel.deleteMany({ event: eventId }).session(session),
-      zoneModel.deleteMany({ event: eventId }).session(session),
-      zoneTicketModel.deleteMany({ event: eventId }).session(session),
-      seatBookingModel.deleteMany({ event: eventId }).session(session),
-      zoneBookingModel.deleteMany({ event: eventId }).session(session),
+      showtimeModel.deleteMany({ eventId: eventId }).session(session),
+      zoneModel.deleteMany({ eventId: eventId }).session(session),
+      zoneTicketModel.deleteMany({ eventId: eventId }).session(session),
+      seatBookingModel.deleteMany({ eventId: eventId }).session(session),
+      zoneBookingModel.deleteMany({ eventId: eventId }).session(session),
       // Nếu bạn có các bảng interactions, tags gán theo event thì thêm vào đây
       // tagModel.updateMany({ events: eventId }, { $pull: { events: eventId } }).session(session),
     ]);
@@ -623,50 +623,112 @@ router.put("/edit", async function (req, res, next) {
 
     await itemUpdate.save({ session });
 
-    // Handle showtimes updates - Smart update thay vì delete + create
-    const createdShowtimes = [];
+    // Handle showtimes updates - ưu tiên cập nhật theo _id, tránh xóa showtime có booking
+    let updatedOrCreatedShowtimeIds = [];
     if (Array.isArray(showtimes)) {
-      // Lấy showtimes hiện tại
       const existingShowtimes = await showtimeModel.find({ eventId: id }).session(session);
-      const existingMap = new Map(existingShowtimes.map(st => [st.startTime, st]));
       
-      // Xử lý từng showtime mới
+      // Debug logging để kiểm tra
+      console.log('🔍 Debug showtime matching:');
+      console.log('Existing showtimes:', existingShowtimes.map(st => ({ id: st._id.toString(), startTime: st.startTime })));
+      console.log('Incoming showtimes:', showtimes.map(st => ({ id: st._id, startTime: st.startTime })));
+      
+      const existingById = new Map(existingShowtimes.map(st => [st._id.toString(), st]));
+      const existingByStartTime = new Map(existingShowtimes.map(st => [String(st.startTime), st]));
+
       for (const st of showtimes) {
-        if (existingMap.has(st.startTime)) {
-          // Update showtime hiện tại
-          const existing = existingMap.get(st.startTime);
+        let targetShowtime = null;
+        
+        // Ưu tiên tìm theo _id trước
+        if (st._id) {
+          const incomingId = String(st._id);
+          console.log(`🔍 Looking for showtime with _id: ${incomingId}`);
+          console.log(`🔍 Available IDs: ${Array.from(existingById.keys())}`);
+          
+          if (existingById.has(incomingId)) {
+            targetShowtime = existingById.get(incomingId);
+            console.log(`✅ Found existing showtime by _id: ${incomingId}`);
+          } else {
+            console.log(`❌ No showtime found with _id: ${incomingId}`);
+          }
+        } 
+        // Chỉ fallback theo startTime nếu không có _id hoặc _id không tồn tại
+        else if (st.startTime) {
+          const incomingStartTime = String(st.startTime);
+          console.log(`🔍 Looking for showtime with startTime: ${incomingStartTime}`);
+          
+          if (existingByStartTime.has(incomingStartTime)) {
+            targetShowtime = existingByStartTime.get(incomingStartTime);
+            console.log(`✅ Found existing showtime by startTime: ${incomingStartTime}`);
+          } else {
+            console.log(`❌ No showtime found with startTime: ${incomingStartTime}`);
+          }
+        }
+
+        if (targetShowtime) {
+          // Cập nhật showtime hiện có
+          console.log(`🔄 Updating existing showtime: ${targetShowtime._id}`);
           await showtimeModel.updateOne(
-            { _id: existing._id },
+            { _id: targetShowtime._id },
             {
               $set: {
-                endTime: st.endTime,
-                ticketPrice: st.ticketPrice,
-                ticketQuantity: st.ticketQuantity
+                startTime: st.startTime ?? targetShowtime.startTime,
+                endTime: st.endTime ?? targetShowtime.endTime,
+                ticketPrice: st.ticketPrice ?? targetShowtime.ticketPrice,
+                ticketQuantity: st.ticketQuantity ?? targetShowtime.ticketQuantity
               }
             },
             { session }
           );
-          createdShowtimes.push(existing);
+          updatedOrCreatedShowtimeIds.push(targetShowtime._id.toString());
         } else {
-          // Tạo showtime mới
-          const [newShowtime] = await showtimeModel.create([{
-            eventId: id,
-            startTime: st.startTime,
-            endTime: st.endTime,
-            ticketPrice: st.ticketPrice,
-            ticketQuantity: st.ticketQuantity
-          }], { session });
-          createdShowtimes.push(newShowtime);
+          // Chỉ tạo mới khi thực sự không tìm thấy showtime nào phù hợp
+          console.log(`🆕 Creating new showtime because no match found`);
+          const [newShowtime] = await showtimeModel.create([
+            {
+              eventId: id,
+              startTime: st.startTime,
+              endTime: st.endTime,
+              ticketPrice: st.ticketPrice,
+              ticketQuantity: st.ticketQuantity
+            }
+          ], { session });
+          updatedOrCreatedShowtimeIds.push(newShowtime._id.toString());
         }
       }
-      
-      // Xóa showtimes không còn trong danh sách mới
-      const newStartTimes = new Set(showtimes.map(st => st.startTime));
-      const toDelete = existingShowtimes.filter(st => !newStartTimes.has(st.startTime));
-      if (toDelete.length > 0) {
-        await showtimeModel.deleteMany({
-          _id: { $in: toDelete.map(st => st._id) }
+
+      // Xóa showtimes không còn trong danh sách mới (chỉ khi không có booking)
+      const incomingIds = new Set(
+        showtimes
+          .map(st => st._id)
+          .filter(Boolean)
+          .map(x => x.toString())
+      );
+
+      const candidatesToDelete = existingShowtimes.filter(st => !incomingIds.has(st._id.toString()));
+      const deletableIds = [];
+      for (const st of candidatesToDelete) {
+        // Kiểm tra seat bookings
+        const hasSeatBookings = await seatBookingModel.exists({
+          eventId: id,
+          showtimeId: st._id,
+          status: { $in: ['booked', 'reserved'] }
         }).session(session);
+
+        // Kiểm tra zone bookings
+        const zoneTicketsOfShowtime = await zoneTicketModel.find({ eventId: id, showtimeId: st._id }).select('_id').session(session);
+        const zoneTicketIds = zoneTicketsOfShowtime.map(z => z._id);
+        const hasZoneBookings = zoneTicketIds.length > 0
+          ? await zoneBookingModel.exists({ zoneId: { $in: zoneTicketIds }, status: { $in: ['booked', 'reserved'] } }).session(session)
+          : null;
+
+        // Chỉ xóa khi không có booking nào
+        if (!hasSeatBookings && !hasZoneBookings) {
+          deletableIds.push(st._id);
+        }
+      }
+      if (deletableIds.length > 0) {
+        await showtimeModel.deleteMany({ _id: { $in: deletableIds } }).session(session);
       }
     }
 
@@ -680,156 +742,122 @@ router.put("/edit", async function (req, res, next) {
       }
     }
 
-    // Handle zones based on new typeBase
-    if (typeBase === 'zone' && Array.isArray(zones)) {
-      // Smart update zone tickets thay vì delete + create
-      const existingZoneTickets = await zoneTicketModel.find({ eventId: id }).session(session);
-      const existingZoneMap = new Map(existingZoneTickets.map(zt => [`${zt.showtimeId}-${zt.name}`, zt]));
-      
-      for (const zone of zones) {
-        if (createdShowtimes.length > 0) {
-          for (const showtime of createdShowtimes) {
-            const key = `${showtime._id}-${zone.name}`;
-            if (existingZoneMap.has(key)) {
-              // Update zone ticket hiện tại
-              const existing = existingZoneMap.get(key);
-              await zoneTicketModel.updateOne(
-                { _id: existing._id },
-                {
-                  $set: {
-                    totalTicketCount: zone.totalTicketCount,
-                    price: zone.price
-                  }
-                },
+    // Handle zones based on new typeBase (ZONE): đảm bảo có vé cho tất cả showtime, kể cả khi không gửi zones
+    if (typeBase === 'zone') {
+      const currentShowtimes = await showtimeModel.find({ eventId: id }).session(session);
+      const zonesSource = Array.isArray(zones) && zones.length > 0
+        ? zones
+        : (() => {
+            // Suy luận từ vé hiện có
+            const inferred = new Map();
+            // không dùng session vì chỉ đọc
+            // lấy 1 vé đại diện cho mỗi tên
+            // (nếu không có vé nào, skip - caller cần gửi zones)
+            return inferred;
+          })();
+
+      let zonesToUse = zonesSource;
+      if (!(Array.isArray(zonesToUse) && zonesToUse.length > 0)) {
+        // Thử suy luận zone từ zoneTicket hiện có
+        const existingTickets = await zoneTicketModel.find({ eventId: id }).session(session);
+        const mapByName = new Map();
+        for (const zt of existingTickets) {
+          if (!mapByName.has(zt.name)) {
+            mapByName.set(zt.name, { name: zt.name, totalTicketCount: zt.totalTicketCount, price: zt.price });
+          }
+        }
+        zonesToUse = Array.from(mapByName.values());
+      }
+
+      if (Array.isArray(zonesToUse) && zonesToUse.length > 0) {
+        for (const st of currentShowtimes) {
+          for (const z of zonesToUse) {
+            await zoneTicketModel.updateOne(
+              { eventId: id, showtimeId: st._id, name: z.name },
+              {
+                $setOnInsert: {
+                  eventId: id,
+                  showtimeId: st._id,
+                  name: z.name,
+                  totalTicketCount: z.totalTicketCount,
+                  price: z.price
+                }
+              },
+              { upsert: true, session }
+            );
+          }
+        }
+      }
+      // Tránh xóa vé để không mất dữ liệu đang có booking
+    }
+
+    if (typeBase === 'seat') {
+      // Lấy zones nguồn: ưu tiên payload, fallback từ DB
+      const zonesSource = Array.isArray(zones) && zones.length > 0
+        ? zones
+        : await zoneModel.find({ eventId: id }).session(session);
+
+      if (Array.isArray(zonesSource) && zonesSource.length > 0) {
+        // Cập nhật zoneModel (nếu payload có zones với layout mới)
+        if (Array.isArray(zones) && zones.length > 0) {
+          const existingZones = await zoneModel.find({ eventId: id }).session(session);
+          const existingZoneMap = new Map(existingZones.map(z => [z.name, z]));
+          for (const z of zones) {
+            if (existingZoneMap.has(z.name)) {
+              await zoneModel.updateOne(
+                { _id: existingZoneMap.get(z.name)._id },
+                { $set: { layout: z.layout } },
                 { session }
               );
             } else {
-              // Tạo zone ticket mới
-              await zoneTicketModel.create([
-                {
-                  showtimeId: showtime._id,
-                  name: zone.name,
-                  totalTicketCount: zone.totalTicketCount,
-                  price: zone.price,
-                  eventId: id
-                }
-              ], { session });
+              await zoneModel.create([{ name: z.name, layout: z.layout, eventId: id }], { session });
             }
           }
         }
-      }
-      
-      // Xóa zone tickets không còn trong danh sách mới
-      const newZoneKeys = new Set();
-      zones.forEach(zone => {
-        createdShowtimes.forEach(showtime => {
-          newZoneKeys.add(`${showtime._id}-${zone.name}`);
-        });
-      });
-      
-      const toDelete = existingZoneTickets.filter(zt => !newZoneKeys.has(`${zt.showtimeId}-${zt.name}`));
-      if (toDelete.length > 0) {
-        await zoneTicketModel.deleteMany({
-          _id: { $in: toDelete.map(zt => zt._id) }
-        }).session(session);
-      }
-    }
 
-    if (typeBase === 'seat' && Array.isArray(zones)) {
-      // Smart update zones và seat tickets thay vì delete + create
-      const existingZones = await zoneModel.find({ eventId: id }).session(session);
-      const existingZoneMap = new Map(existingZones.map(z => [z.name, z]));
-      
-      for (const zone of zones) {
-        if (existingZoneMap.has(zone.name)) {
-          // Update zone hiện tại
-          const existingZone = existingZoneMap.get(zone.name);
-          await zoneModel.updateOne(
-            { _id: existingZone._id },
-            { $set: { layout: zone.layout } },
-            { session }
-          );
-          
-          // Update seat tickets cho zone này
-          if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
-            const existingSeatTickets = await zoneTicketModel.find({
-              eventId: id,
-              name: { $regex: `^${zone.name} - ` }
-            }).session(session);
-            
-            // Xóa seat tickets cũ của zone này
-            if (existingSeatTickets.length > 0) {
-              await zoneTicketModel.deleteMany({
-                _id: { $in: existingSeatTickets.map(st => st._id) }
-              }).session(session);
-            }
-            
-            // Tạo seat tickets mới
-            for (const showtime of createdShowtimes) {
-              const seatTickets = zone.layout.seats.map(seat => ({
-                showtimeId: showtime._id,
-                name: `${zone.name} - ${seat.label}`,
-                totalTicketCount: 1,
-                price: seat.price,
-                eventId: id
-              }));
-              if (seatTickets.length > 0) {
-                await zoneTicketModel.insertMany(seatTickets, { session });
-              }
-            }
-          }
-        } else {
-          // Tạo zone mới
-          const [newZone] = await zoneModel.create([
-            {
-              name: zone.name,
-              layout: zone.layout,
-              eventId: id
-            }
-          ], { session });
-          
-          // Tạo seat tickets cho zone mới
-          if (createdShowtimes.length > 0 && zone.layout && Array.isArray(zone.layout.seats)) {
-            for (const showtime of createdShowtimes) {
-              const seatTickets = zone.layout.seats.map(seat => ({
-                showtimeId: showtime._id,
-                name: `${zone.name} - ${seat.label}`,
-                totalTicketCount: 1,
-                price: seat.price,
-                eventId: id
-              }));
-              if (seatTickets.length > 0) {
-                await zoneTicketModel.insertMany(seatTickets, { session });
-              }
+        const currentShowtimes = await showtimeModel.find({ eventId: id }).session(session);
+        for (const st of currentShowtimes) {
+          for (const z of zonesSource) {
+            const seats = z.layout && Array.isArray(z.layout.seats) ? z.layout.seats : [];
+            for (const seat of seats) {
+              const name = `${z.name} - ${seat.label}`;
+              await zoneTicketModel.updateOne(
+                { eventId: id, showtimeId: st._id, name },
+                {
+                  $setOnInsert: {
+                    eventId: id,
+                    showtimeId: st._id,
+                    name,
+                    totalTicketCount: 1,
+                    price: seat.price
+                  }
+                },
+                { upsert: true, session }
+              );
             }
           }
         }
       }
-      
-      // Xóa zones không còn trong danh sách mới
-      const newZoneNames = new Set(zones.map(z => z.name));
-      const zonesToDelete = existingZones.filter(z => !newZoneNames.has(z.name));
-      if (zonesToDelete.length > 0) {
-        await zoneModel.deleteMany({
-          _id: { $in: zonesToDelete.map(z => z._id) }
-        }).session(session);
-        
-        // Xóa seat tickets của zones bị xóa
-        for (const zoneToDelete of zonesToDelete) {
-          await zoneTicketModel.deleteMany({
-            eventId: id,
-            name: { $regex: `^${zoneToDelete.name} - ` }
-          }).session(session);
-        }
-      }
+      // Không xóa seat tickets để tránh ảnh hưởng booking/pricing
     }
 
     await session.commitTransaction();
     session.endSession();
-    // Xóa cache getEvents của user
+    // Xóa cache: danh sách và chi tiết
+    await redis.del('events_home');
+    await redis.del('events_public');
+    await redis.del('events_all_admin');
     if (itemUpdate.userId) {
       await redis.del(`getEvents:${itemUpdate.userId}`);
-      await redis.del(`events_detail_${id}`)
+    }
+    const detailKeys = await redis.keys(`events_detail_${id}_*`);
+    if (detailKeys.length > 0) {
+      await redis.del(...detailKeys);
+    }
+    // Xóa cache trạng thái ghế theo showtime
+    const seatStatusKeys = await redis.keys(`seatStatus:${id}:*`);
+    if (seatStatusKeys.length > 0) {
+      await redis.del(...seatStatusKeys);
     }
     res.status(200).json({ 
       status: true, 
@@ -1211,8 +1239,19 @@ router.put('/postpone/:eventId',authenticate ,async function (req, res) {
 
     // Xóa cache
     await redis.del("events_home");
-    await redis.del(`events_detail_${eventId}`);
+    await redis.del("events_public");
+    await redis.del("events_all_admin");
     await redis.del(`getEvents:${event.userId}`);
+    // Xóa toàn bộ cache chi tiết cho mọi user (vì key có suffix userId/anonymous)
+    const detailKeys = await redis.keys(`events_detail_${eventId}_*`);
+    if (detailKeys.length > 0) {
+      await redis.del(...detailKeys);
+    }
+    // Xóa cache trạng thái ghế
+    const seatStatusKeys = await redis.keys(`seatStatus:${eventId}:*`);
+    if (seatStatusKeys.length > 0) {
+      await redis.del(...seatStatusKeys);
+    }
 
     // Thông báo qua socket cho user đang ở màn hình sự kiện
     const { getSocketIO } = require('../../../socket/socket');
@@ -1308,8 +1347,17 @@ router.put('/unpostpone/:eventId', async function (req, res) {
 
     // Xóa cache
     await redis.del("events_home");
-    await redis.del(`events_detail_${eventId}`);
+    await redis.del("events_public");
+    await redis.del("events_all_admin");
     await redis.del(`getEvents:${event.userId}`);
+    const detailKeys = await redis.keys(`events_detail_${eventId}_*`);
+    if (detailKeys.length > 0) {
+      await redis.del(...detailKeys);
+    }
+    const seatStatusKeys = await redis.keys(`seatStatus:${eventId}:*`);
+    if (seatStatusKeys.length > 0) {
+      await redis.del(...seatStatusKeys);
+    }
 
     // Thông báo qua socket
     const socketMessage = {
@@ -1341,4 +1389,5 @@ router.put('/unpostpone/:eventId', async function (req, res) {
   }
 });
 
+module.exports = router;
 module.exports = router;
