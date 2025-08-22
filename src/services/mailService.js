@@ -25,6 +25,11 @@ async function sendForgetOtpEmail(to, otp) {
 
 async function sendTicketEmail(ticketData) {
   try {
+    // Validation dữ liệu đầu vào
+    if (!ticketData || !ticketData.user || !ticketData.order || !ticketData.event || !ticketData.showtime) {
+      throw new Error('Dữ liệu ticket không hợp lệ hoặc thiếu thông tin cần thiết');
+    }
+    
     // Đọc template HTML
     const templatePath = path.join(__dirname, '../templates/ticketEmail.html');
     const templateSource = fs.readFileSync(templatePath, 'utf8');
@@ -73,53 +78,53 @@ async function sendTicketEmail(ticketData) {
     
     // Chuẩn bị dữ liệu cho template
     const emailData = {
-      userName: ticketData.user.fullName || ticketData.user.email,
-      orderId: ticketData.order._id,
-      orderDate: new Date(ticketData.order.createdAt).toLocaleDateString('vi-VN', {
+      userName: ticketData.user.fullName || ticketData.user.email || 'Người dùng',
+      orderId: ticketData.order._id || 'N/A',
+      orderDate: ticketData.order.createdAt ? new Date(ticketData.order.createdAt).toLocaleDateString('vi-VN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-      }),
-      ticketCount: ticketData.tickets.length,
-      totalPrice: ticketData.order.totalPrice.toLocaleString('vi-VN'),
-      eventName: ticketData.event.name,
-      eventDate: new Date(ticketData.event.startDate).toLocaleDateString('vi-VN', {
+      }) : '',
+      ticketCount: ticketData.tickets ? ticketData.tickets.length : 0,
+      totalPrice: (ticketData.order.totalPrice || 0).toLocaleString('vi-VN'),
+      eventName: ticketData.event.name || 'Sự kiện',
+      eventDate: ticketData.event.startDate ? new Date(ticketData.event.startDate).toLocaleDateString('vi-VN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
-      }),
-      showtime: new Date(ticketData.showtime.startTime).toLocaleTimeString('vi-VN', {
+      }) : '',
+      showtime: ticketData.showtime.startTime ? new Date(ticketData.showtime.startTime).toLocaleTimeString('vi-VN', {
         hour: '2-digit',
         minute: '2-digit'
-      }),
-      showtimeStart: new Date(ticketData.showtime.startTime).toLocaleString('vi-VN', {
+      }) : '',
+      showtimeStart: ticketData.showtime.startTime ? new Date(ticketData.showtime.startTime).toLocaleString('vi-VN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-      }),
-      showtimeEnd: new Date(ticketData.showtime.endTime).toLocaleString('vi-VN', {
+      }) : '',
+      showtimeEnd: ticketData.showtime.endTime ? new Date(ticketData.showtime.endTime).toLocaleString('vi-VN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-      }),
+      }) : '',
       showtime: ticketData.showtime, // Truyền dữ liệu showtime gốc để sử dụng helper
-      eventLocation: ticketData.event.location,
+      eventLocation: ticketData.event.location || 'Địa điểm chưa được cập nhật',
       bookingType: ticketData.order.bookingType === 'none' ? 'Vé thường' : 
                    ticketData.order.bookingType === 'seat' ? 'Vé theo ghế' : 'Vé theo khu vực',
-             tickets: ticketData.tickets.map(ticket => ({
-         ticketId: ticket.ticketId,
-         ticketNumber: ticket.ticketNumber,
-         status: ticket.status === 'issued' ? 'Đã phát hành' : ticket.status,
-         qrCode: ticket.qrCode,
-         seat: ticket.seat,
-         zone: ticket.zone,
-         totalPrice: ticket.totalPrice.toLocaleString('vi-VN')
+             tickets: (ticketData.tickets || []).map(ticket => ({
+         ticketId: ticket.ticketId || 'N/A',
+         ticketNumber: ticket.ticketNumber || 'N/A',
+         status: ticket.status === 'issued' ? 'Đã phát hành' : (ticket.status || 'Chưa xác định'),
+         qrCode: ticket.qrCode || '',
+         seat: ticket.seat || '',
+         zone: ticket.zone || '',
+         totalPrice: (ticket.totalPrice || 0).toLocaleString('vi-VN')
        })),
       // Gift fields
       isGift: ticketData.isGift || false,
