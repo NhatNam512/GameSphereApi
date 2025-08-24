@@ -112,7 +112,7 @@ router.get("/all", async function (req, res) {
     }
 
     const events = await eventModel.find(filter)
-      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus")
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus isPayment")
       .populate("userId", "username picUrl")
       .populate("tags", "name")
       .lean();
@@ -1072,7 +1072,26 @@ router.post("/sort", async function (req, res) {
 
     // Thêm điều kiện lọc cho tags nếu có
     if (tags && tags.length > 0) {
-      filter.tags = { $in: tags };
+      // Chuyển đổi tag names thành tag IDs
+      const tagIds = await tagModel.find({ name: { $in: tags } }).select('_id');
+      const tagIdArray = tagIds.map(tag => tag._id);
+      
+      if (tagIdArray.length > 0) {
+        filter.tags = { $in: tagIdArray };
+      } else {
+        // Nếu không tìm thấy tag nào, trả về mảng rỗng
+        return res.status(200).json({
+          status: true,
+          message: "Lọc sự kiện thành công",
+          data: [],
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: parseInt(limit)
+          }
+        });
+      }
     }
 
     // Thêm điều kiện lọc cho timeStart nếu có (dựa vào showtime)
@@ -1645,5 +1664,21 @@ router.put('/unpostpone/:eventId', async function (req, res) {
   }
 });
 
-module.exports = router;
+router.put('/confirmPayment/:eventId', async function(req, res){
+  const eventId = req.params;
+  const event = eventModel.findById(eventId);
+  if(!event){
+    return res.status(404).json({
+      status: false,
+      message: "Không tìm thấy sự kiện"
+    });
+  }
+  event.isPayment = true;
+  await event.save();
+  return res.status(200).json({
+    status: true,
+    message: "Xác nhận thanh toán thành công"
+  });
+})
+
 module.exports = router;

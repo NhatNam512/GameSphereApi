@@ -167,7 +167,7 @@ exports.getEvents = async (req, res) => {
     const userId = req.user.id;
 
     // 1. Lấy tất cả events của user
-    const events = await eventModel.find({ userId }).select("_id name typeBase timeStart timeEnd ticketPrice avatar location location_map createdAt approvalStatus approvalReason").lean();
+    const events = await eventModel.find({ userId }).select("_id name typeBase timeStart timeEnd ticketPrice avatar location location_map createdAt approvalStatus approvalReason isPayment").lean();
     const eventIds = events.map(e => e._id);
 
     // 2. Lấy tất cả showtimes, zones, zoneTickets, seatBookings, tickets, orders cho các event này

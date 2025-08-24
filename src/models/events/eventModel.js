@@ -49,7 +49,9 @@ const events = new schema({
     
     embedding: { type: [Number] },
     
-    isPreview: { type: Boolean, default: false }
+    isPreview: { type: Boolean, default: false },
+
+    isPayment: { type: Boolean, default: false }
 }, {
     timestamps: true // Thêm createdAt và updatedAt tự động
 });

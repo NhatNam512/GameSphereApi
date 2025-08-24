@@ -375,19 +375,19 @@
                 <div class="event-info">
                     <div class="info-row">
                         <span class="info-label">📅 Ngày diễn ra: </span>
-                        <span class="info-value">{{eventDate}}</span>
+                        <span class="info-value">{{#if eventDate}}{{eventDate}}{{else}}Chưa cập nhật{{/if}}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">⏰ Thời gian: </span>
-                        <span class="info-value">{{showtime.startTime}} - {{showtime.endTime}}</span>
+                        <span class="info-value">{{#if showtime.startTime}}{{showtime.startTime}}{{else}}Chưa cập nhật{{/if}} - {{#if showtime.endTime}}{{showtime.endTime}}{{else}}Chưa cập nhật{{/if}}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">📅 Ngày chiếu: </span>
-                        <span class="info-value">{{showtime.startTime}}</span>
+                        <span class="info-value">{{#if showtime.startTime}}{{showtime.startTime}}{{else}}Chưa cập nhật{{/if}}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">⏱️ Thời gian bắt đầu: </span>
-                        <span class="info-value">{{showtime.startTime}}</span>
+                        <span class="info-value">{{#if showtime.startTime}}{{showtime.startTime}}{{else}}Chưa cập nhật{{/if}}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">📍 Địa điểm: </span>
@@ -450,19 +450,23 @@
                     <!-- QR Code -->
                     {{#if qrCodeUrl}}
                     <div class="qr-code">
-                        <img src="{{qrCodeUrl}}" alt="QR Code cho vé {{ticketId}}" />
+                        <img src="{{qrCodeUrl}}" alt="QR Code cho vé {{ticketId}}" style="max-width: 200px; height: auto;" />
                         <p>📱 Quét mã QR này tại cổng vào để kiểm soát vé</p>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Mã vé: {{ticketId}}</p>
                     </div>
                     {{else if qrCode}}
                     <div class="qr-code">
-                        <img src="data:image/png;base64,{{qrCode}}" alt="QR Code cho vé {{ticketId}}" />
+                        <img src="data:image/png;base64,{{qrCode}}" alt="QR Code cho vé {{ticketId}}" style="max-width: 200px; height: auto;" />
                         <p>📱 Quét mã QR này tại cổng vào để kiểm soát vé</p>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Mã vé: {{ticketId}}</p>
                     </div>
                     {{else}}
-                    <div class="qr-code" style="background-color: #f8f9fa; border: 2px dashed #dee2e6;">
-                        <p style="color: #6c757d; font-size: 16px;">🔄 QR Code đang được tạo...</p>
-                        <p style="color: #6c757d; font-size: 14px; margin-top: 10px;">Vui lòng chờ trong giây lát</p>
-                        <p style="color: #6c757d; font-size: 12px; margin-top: 5px;">Mã vé: {{ticketId}}</p>
+                    <div class="qr-code" style="background-color: #f8f9fa; border: 2px dashed #dee2e6; text-align: center;">
+                        <div style="width: 200px; height: 200px; margin: 0 auto; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                            <p style="color: #6c757d; font-size: 16px; margin-bottom: 10px;">🔄 QR Code đang được tạo...</p>
+                            <p style="color: #6c757d; font-size: 14px; margin-bottom: 10px;">Vui lòng chờ trong giây lát</p>
+                            <p style="color: #6c757d; font-size: 12px; font-weight: bold;">Mã vé: {{ticketId}}</p>
+                        </div>
                     </div>
                     {{/if}}
                 </div>
@@ -487,11 +491,15 @@
             {{#if debug}}
             <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin: 20px 0; font-family: monospace; font-size: 12px;">
                 <h4 style="color: #6c757d; margin-bottom: 10px;">🔍 Debug Info:</h4>
-                <p><strong>Showtime:</strong> {{showtime}}</p>
+                <p><strong>Showtime Object:</strong> {{showtime}}</p>
+                <p><strong>Showtime Start:</strong> {{showtime.startTime}}</p>
+                <p><strong>Showtime End:</strong> {{showtime.endTime}}</p>
                 <p><strong>Event Date:</strong> {{eventDate}}</p>
                 <p><strong>Order Date:</strong> {{orderDate}}</p>
                 <p><strong>QR Code Available:</strong> {{#if qrCode}}Yes{{else}}No{{/if}}</p>
                 <p><strong>QR Code URL Available:</strong> {{#if qrCodeUrl}}Yes{{else}}No{{/if}}</p>
+                <p><strong>Ticket Count:</strong> {{ticketCount}}</p>
+                <p><strong>Total Price:</strong> {{totalPrice}}</p>
             </div>
             {{/if}}
 
