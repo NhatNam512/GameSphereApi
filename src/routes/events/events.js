@@ -111,15 +111,86 @@ router.get("/all", async function (req, res) {
       return res.json(JSON.parse(cachedData));
     }
 
-    const events = await eventModel.find(filter);
-    await redis.set(cacheKey, JSON.stringify(events));
+    const events = await eventModel.find(filter)
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus")
+      .populate("userId", "username picUrl")
+      .populate("tags", "name")
+      .lean();
+
+    // 👉 Map locamap -> longitude/latitude and add min/max ticket prices
+    const mappedEvents = await Promise.all(events.map(async (ev) => {
+      if (ev.location_map && ev.location_map.coordinates) {
+        ev.longitude = ev.location_map.coordinates[0];
+        ev.latitude = ev.location_map.coordinates[1];
+      }
+      
+      let ticketPrices = [];
+
+      if (ev.typeBase === 'seat') {
+        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price layout.seats.seatId');
+        if (zones.length === 0) {
+        }
+        zones.forEach(zone => {
+          if (zone && zone.layout && zone.layout.seats) {
+            const currentZonePrices = zone.layout.seats
+              .filter(seat => seat.seatId !== "none")
+              .map(seat => seat.price)
+              .filter(price => price !== undefined && price !== null);
+            ticketPrices.push(...currentZonePrices);
+          } else {
+          }
+        });
+      } 
+      else if (ev.typeBase === 'zone') {
+        const zoneTickets = await zoneTicketModel
+          .find({ eventId: ev._id })
+          .select('price');
+      
+        ticketPrices = zoneTickets
+          .map(t => t.price)
+          .filter(price => price !== undefined && price !== null);
+      }
+      else if (ev.typeBase === 'none') {
+        const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
+        ticketPrices = showtimes.map(st => st.ticketPrice).filter(price => price !== undefined && price !== null);
+      }
+      
+      if (ticketPrices.length > 0) {
+        ev.minTicketPrice = Math.min(...ticketPrices);
+        ev.maxTicketPrice = Math.max(...ticketPrices);
+      } else {
+        ev.minTicketPrice = null; 
+        ev.maxTicketPrice = null;
+      }
+
+      // Thêm showtimes cho từng event
+      const showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
+      ev.showtimes = showtimes;
+      
+      // Lấy tên các tag từ populated data
+      if (ev.tags && ev.tags.length > 0) {
+        ev.tags = ev.tags.map(tag => {
+          if (typeof tag === 'object' && tag.name) {
+            return tag.name;
+          }
+          return tag;
+        }).filter(tag => tag); // Remove any null/undefined values
+      } else {
+        ev.tags = [];
+      }
+      
+      return ev;
+    }));
+
+    await redis.set(cacheKey, JSON.stringify(mappedEvents), 'EX', 300);
     res.status(200).json({
       status: true,
       message: "Lấy danh sách sự kiện thành công",
-      data: events
+      data: mappedEvents
     });
   } catch (e) {
-    res.status(400).json({ status: false, message: "Error" + e });
+    console.error("❌ Error in /all route:", e);
+    res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
   }
 });
 
@@ -234,6 +305,41 @@ router.get("/home", async function (req, res) {
 
   } catch (e) {
     console.error("❌ Error in /home route:", e);
+    res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
+  }
+});
+
+
+
+// API để lấy danh sách tags có sẵn
+router.get("/tags", async function (req, res) {
+  try {
+    const cacheKey = "available_tags";
+    
+    // Kiểm tra cache
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      const tags = JSON.parse(cachedData);
+      return res.status(200).json({
+        status: true,
+        message: "Lấy danh sách tags thành công (cache)",
+        data: tags
+      });
+    }
+
+    // Lấy tất cả tags từ database
+    const tags = await tagModel.find({}).select('name _id').lean();
+    
+    // Cache trong 1 giờ
+    await redis.set(cacheKey, JSON.stringify(tags), 'EX', 3600);
+    
+    res.status(200).json({
+      status: true,
+      message: "Lấy danh sách tags thành công",
+      data: tags
+    });
+  } catch (e) {
+    console.error("❌ Error in /tags route:", e);
     res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
   }
 });
@@ -958,40 +1064,190 @@ router.get("/revenue", revenueController.getRevenue);
 
 router.post("/sort", async function (req, res) {
   try {
-    const { categories, ticketPrice, timeStart } = req.body;
+    const { tags, minTicketPrice, timeStart, limit = 50, page = 1 } = req.body;
     const filter = {};
 
     // Luôn loại trừ sự kiện pending, rejected (bao gồm cả postponed)
     filter.approvalStatus = { $nin: ['pending', 'rejected'] };
 
-    // Thêm điều kiện lọc cho categories nếu có
-    if (categories) {
-      filter.categories = categories;
+    // Thêm điều kiện lọc cho tags nếu có
+    if (tags && tags.length > 0) {
+      filter.tags = { $in: tags };
     }
 
-    // Thêm điều kiện lọc cho ticketPrice nếu có
-    if (ticketPrice) {
-      filter.ticketPrice = { $lte: ticketPrice }; // Lọc các sự kiện có giá vé nhỏ hơn hoặc bằng ticketPrice
-    }
-
-    // Thêm điều kiện lọc cho timeStart nếu có
+    // Thêm điều kiện lọc cho timeStart nếu có (dựa vào showtime)
     if (timeStart) {
-      filter.timeStart = { $gte: new Date(timeStart) }; // Lọc các sự kiện bắt đầu từ timeStart trở đi
+      // Tìm các event có showtime bắt đầu từ timeStart trở đi
+      const showtimeModel = require('../../models/events/showtimeModel');
+      const showtimes = await showtimeModel.find({
+        startTime: { $gte: new Date(timeStart) }
+      }).select('eventId');
+      
+      const eventIds = [...new Set(showtimes.map(st => st.eventId))];
+      if (eventIds.length > 0) {
+        filter._id = { $in: eventIds };
+      } else {
+        // Nếu không có showtime nào thỏa mãn, trả về mảng rỗng
+        return res.status(200).json({
+          status: true,
+          message: "Lọc sự kiện thành công",
+          data: [],
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: parseInt(limit)
+          }
+        });
+      }
     }
 
-    const events = await eventModel.find(filter).select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus");
+    // Tính toán skip cho pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    if (events.length > 0) {
+    console.time("🗃️ DB Query");
+    const events = await eventModel.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select("_id name timeStart timeEnd avatar banner categories location latitude longitude location_map typeBase zone tags userId createdAt approvalStatus")
+      .populate("userId", "username picUrl")
+      .populate("tags", "name")
+      .lean();
+    console.timeEnd("🗃️ DB Query");
+
+    // Đếm tổng số sự kiện thỏa mãn điều kiện (không có limit)
+    const totalEvents = await eventModel.countDocuments(filter);
+
+    // 👉 Map locamap -> longitude/latitude and add min/max ticket prices
+    const mappedEvents = await Promise.all(events.map(async (ev) => {
+      if (ev.location_map && ev.location_map.coordinates) {
+        ev.longitude = ev.location_map.coordinates[0];
+        ev.latitude = ev.location_map.coordinates[1];
+      }
+      
+      let ticketPrices = [];
+
+      if (ev.typeBase === 'seat') {
+        const zones = await zoneModel.find({ eventId: ev._id }).select('layout.seats.price layout.seats.seatId');
+        if (zones.length === 0) {
+        }
+        zones.forEach(zone => {
+          if (zone && zone.layout && zone.layout.seats) {
+            const currentZonePrices = zone.layout.seats
+              .filter(seat => seat.seatId !== "none")
+              .map(seat => seat.price)
+              .filter(price => price !== undefined && price !== null);
+            ticketPrices.push(...currentZonePrices);
+          } else {
+          }
+        });
+      } 
+      else if (ev.typeBase === 'zone') {
+        const zoneTickets = await zoneTicketModel
+          .find({ eventId: ev._id })
+          .select('price');
+      
+        ticketPrices = zoneTickets
+          .map(t => t.price)
+          .filter(price => price !== undefined && price !== null);
+      }
+      else if (ev.typeBase === 'none') {
+        const showtimes = await showtimeModel.find({ eventId: ev._id }).select("ticketPrice");
+        ticketPrices = showtimes.map(st => st.ticketPrice).filter(price => price !== undefined && price !== null);
+      }
+      
+      if (ticketPrices.length > 0) {
+        ev.minTicketPrice = Math.min(...ticketPrices);
+        ev.maxTicketPrice = Math.max(...ticketPrices);
+      } else {
+        ev.minTicketPrice = null; 
+        ev.maxTicketPrice = null;
+      }
+
+      // Thêm showtimes cho từng event
+      const showtimes = await showtimeModel.find({ eventId: ev._id }).select("startTime endTime ticketPrice ticketQuantity");
+      ev.showtimes = showtimes;
+      
+      // Lấy tên các tag từ populated data
+      if (ev.tags && ev.tags.length > 0) {
+        ev.tags = ev.tags.map(tag => {
+          if (typeof tag === 'object' && tag.name) {
+            return tag.name;
+          }
+          return tag;
+        }).filter(tag => tag); // Remove any null/undefined values
+      } else {
+        ev.tags = [];
+      }
+      
+      return ev;
+    }));
+
+    // Lọc theo minTicketPrice sau khi đã tính toán giá vé
+    let filteredEvents = mappedEvents;
+    if (minTicketPrice) {
+      filteredEvents = mappedEvents.filter(ev => 
+        ev.minTicketPrice && ev.minTicketPrice >= minTicketPrice
+      );
+    }
+
+    // Tính toán thống kê giá vé tổng hợp
+    const allMinPrices = filteredEvents
+      .map(ev => ev.minTicketPrice)
+      .filter(price => price !== null && price !== undefined);
+    
+    const allMaxPrices = filteredEvents
+      .map(ev => ev.maxTicketPrice)
+      .filter(price => price !== null && price !== undefined);
+
+    const priceStats = {
+      overallMinPrice: allMinPrices.length > 0 ? Math.min(...allMinPrices) : null,
+      overallMaxPrice: allMaxPrices.length > 0 ? Math.max(...allMaxPrices) : null,
+      averageMinPrice: allMinPrices.length > 0 ? Math.round(allMinPrices.reduce((a, b) => a + b, 0) / allMinPrices.length) : null,
+      averageMaxPrice: allMaxPrices.length > 0 ? Math.round(allMaxPrices.reduce((a, b) => a + b, 0) / allMaxPrices.length) : null,
+      totalEventsWithPricing: allMinPrices.length
+    };
+
+    // Tính toán pagination
+    const totalPages = Math.ceil(totalEvents / parseInt(limit));
+
+    if (filteredEvents.length > 0) {
       res.status(200).json({
         status: true,
         message: "Lọc sự kiện thành công",
-        data: events
+        data: filteredEvents,
+        priceStats: priceStats,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: totalPages,
+          totalItems: totalEvents,
+          itemsPerPage: parseInt(limit)
+        }
       });
     } else {
-      res.status(404).json({ status: false, message: "Không tìm thấy sự kiện" });
+      res.status(200).json({
+        status: true,
+        message: "Không tìm thấy sự kiện",
+        data: [],
+        priceStats: {
+          overallMinPrice: null,
+          overallMaxPrice: null,
+          averageMinPrice: null,
+          averageMaxPrice: null,
+          totalEventsWithPricing: 0
+        },
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: parseInt(limit)
+        }
+      });
     }
   } catch (e) {
-    res.status(400).json({ status: false, message: "Error: " + e.message });
+    console.error("❌ Error in /sort route:", e);
+    res.status(500).json({ status: false, message: "Lỗi server: " + e.message });
   }
 });
 
