@@ -1203,12 +1203,22 @@ router.post("/sort", async function (req, res) {
       return ev;
     }));
 
-    // Lọc theo minTicketPrice sau khi đã tính toán giá vé
+    // Lọc theo khoảng giá sau khi đã tính toán giá vé
     let filteredEvents = mappedEvents;
-    if (minTicketPrice) {
-      filteredEvents = mappedEvents.filter(ev => 
-        ev.minTicketPrice && ev.minTicketPrice >= minTicketPrice
-      );
+    if (minTicketPrice !== undefined && minTicketPrice !== null) {
+      if (req.body.maxTicketPrice !== undefined && req.body.maxTicketPrice !== null) {
+        // Nếu có maxTicketPrice, lọc theo khoảng giá
+        filteredEvents = mappedEvents.filter(ev => 
+          ev.minTicketPrice && 
+          ev.minTicketPrice >= minTicketPrice && 
+          ev.minTicketPrice <= req.body.maxTicketPrice
+        );
+      } else {
+        // Nếu không có maxTicketPrice, chỉ lọc theo minTicketPrice
+        filteredEvents = mappedEvents.filter(ev => 
+          ev.minTicketPrice && ev.minTicketPrice >= minTicketPrice
+        );
+      }
     }
 
     // Tính toán thống kê giá vé tổng hợp
