@@ -30,6 +30,10 @@ const users = new schema({
     refreshToken: { type: String },
     gender: {type: Number},
     date: {type: String},
+    // Thông tin ngân hàng
+    bankAccountHolder: { type: String }, // Chủ tài khoản
+    bankAccountNumber: { type: String }, // Số tài khoản
+    bankName: { type: String }, // Tên ngân hàng
 }, {
     timestamps: {
         createdAt: 'createAt',

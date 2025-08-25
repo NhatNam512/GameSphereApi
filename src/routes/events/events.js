@@ -1675,20 +1675,131 @@ router.put('/unpostpone/:eventId', async function (req, res) {
 });
 
 router.put('/confirmPayment/:eventId', async function(req, res){
-  const eventId = req.params;
-  const event = eventModel.findById(eventId);
-  if(!event){
-    return res.status(404).json({
+  try {
+    const eventId = req.params.eventId;
+    const event = await eventModel.findById(eventId);
+    
+    if(!event){
+      return res.status(404).json({
+        status: false,
+        message: "Không tìm thấy sự kiện"
+      });
+    }
+    
+    event.isPayment = true;
+    await event.save();
+    
+    return res.status(200).json({
+      status: true,
+      message: "Xác nhận thanh toán thành công"
+    });
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    return res.status(500).json({
       status: false,
-      message: "Không tìm thấy sự kiện"
+      message: "Lỗi server khi xác nhận thanh toán"
     });
   }
-  event.isPayment = true;
-  await event.save();
-  return res.status(200).json({
-    status: true,
-    message: "Xác nhận thanh toán thành công"
-  });
+})
+
+// API cập nhật thông tin ngân hàng của user
+router.put('/updateBankInfo', authenticate, async function(req, res){
+  try {
+    const { bankAccountHolder, bankAccountNumber, bankName } = req.body;
+    const userId = req.user.id;
+
+    // Validation
+    if (!bankAccountHolder || !bankAccountNumber || !bankName) {
+      return res.status(400).json({
+        status: false,
+        message: "Vui lòng điền đầy đủ thông tin ngân hàng"
+      });
+    }
+
+    // Kiểm tra format số tài khoản (chỉ chứa số)
+    if (!/^\d+$/.test(bankAccountNumber)) {
+      return res.status(400).json({
+        status: false,
+        message: "Số tài khoản chỉ được chứa số"
+      });
+    }
+
+    // Kiểm tra độ dài số tài khoản (thường từ 8-19 số)
+    if (bankAccountNumber.length < 8 || bankAccountNumber.length > 19) {
+      return res.status(400).json({
+        status: false,
+        message: "Số tài khoản phải có từ 8-19 chữ số"
+      });
+    }
+
+    const userModel = require('../../models/userModel');
+    const user = await userModel.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Không tìm thấy người dùng"
+      });
+    }
+
+    // Cập nhật thông tin ngân hàng
+    user.bankAccountHolder = bankAccountHolder.trim();
+    user.bankAccountNumber = bankAccountNumber.trim();
+    user.bankName = bankName.trim();
+    
+    await user.save();
+
+    return res.status(200).json({
+      status: true,
+      message: "Cập nhật thông tin ngân hàng thành công",
+      data: {
+        bankAccountHolder: user.bankAccountHolder,
+        bankAccountNumber: user.bankAccountNumber,
+        bankName: user.bankName
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating bank info:', error);
+    return res.status(500).json({
+      status: false,
+      message: "Lỗi server khi cập nhật thông tin ngân hàng"
+    });
+  }
+})
+
+// API lấy thông tin ngân hàng của user
+router.get('/bankInfo', authenticate, async function(req, res){
+  try {
+    const userId = req.user.id;
+    const userModel = require('../../models/userModel');
+    
+    const user = await userModel.findById(userId).select('bankAccountHolder bankAccountNumber bankName');
+    
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Không tìm thấy người dùng"
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: "Lấy thông tin ngân hàng thành công",
+      data: {
+        bankAccountHolder: user.bankAccountHolder || '',
+        bankAccountNumber: user.bankAccountNumber || '',
+        bankName: user.bankName || ''
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting bank info:', error);
+    return res.status(500).json({
+      status: false,
+      message: "Lỗi server khi lấy thông tin ngân hàng"
+    });
+  }
 })
 
 module.exports = router;
